@@ -23,7 +23,7 @@ def mark_absent_employees():
     Skips Sundays and holidays from Holiday table.
     """
     logger.info("="*60)
-    logger.info("🕐 Starting automatic absent marking task...")
+    logger.info("Starting automatic absent marking task...")
     
     try:
         now_ist = timezone.localtime(timezone.now(), IST)
@@ -31,19 +31,19 @@ def mark_absent_employees():
         current_time = now_ist.time()
         weekday_name = today.strftime('%A')
         
-        logger.info(f"📅 Current IST time: {now_ist}")
-        logger.info(f"📅 Date: {today} ({weekday_name})")
+        logger.info(f"Current IST time: {now_ist}")
+        logger.info(f"Date: {today} ({weekday_name})")
         
         # Check if today is Sunday
         if today.weekday() == 6:  # Sunday = 6
-            logger.info("🎉 Today is Sunday - No absent marking needed!")
+            logger.info("Today is Sunday - No absent marking needed!")
             logger.info("="*60)
             return
         
         # Check if today is a holiday
         holiday = Holiday.objects.filter(date=today).first()
         if holiday:
-            logger.info(f"🎉 Today is a holiday: {holiday.name} - No absent marking needed!")
+            logger.info(f"Today is a holiday: {holiday.name} - No absent marking needed!")
             logger.info("="*60)
             return
         
@@ -60,7 +60,7 @@ def mark_absent_employees():
         skipped_already_absent = 0
         skipped_already_present = 0
         
-        logger.info(f"👥 Total employees to check: {all_employees.count()}")
+        logger.info(f"Total employees to check: {all_employees.count()}")
         logger.info("-"*60)
         
         for emp in all_employees:
@@ -86,24 +86,24 @@ def mark_absent_employees():
                     )
                     if created:
                         marked_absent_count += 1
-                        logger.info(f"  ❌ NEW ABSENT: {emp.fullname} ({emp.email.email})")
+                        logger.info(f"  NEW ABSENT: {emp.fullname} ({emp.email.email})")
                 else:
                     skipped_already_absent += 1
-                    logger.info(f"  ⏩ SKIP (already absent): {emp.fullname} ({emp.email.email})")
+                    logger.info(f"  SKIP (already absent): {emp.fullname} ({emp.email.email})")
             else:
                 skipped_already_present += 1
         
         logger.info("-"*60)
-        logger.info(f"✅ Task completed!")
-        logger.info(f"   • Newly marked absent: {marked_absent_count}")
-        logger.info(f"   • Already absent (skipped): {skipped_already_absent}")
-        logger.info(f"   • Present (skipped): {skipped_already_present}")
-        logger.info(f"   • Total: {all_employees.count()}")
+        logger.info(f"Task completed!")
+        logger.info(f"   * Newly marked absent: {marked_absent_count}")
+        logger.info(f"   * Already absent (skipped): {skipped_already_absent}")
+        logger.info(f"   * Present (skipped): {skipped_already_present}")
+        logger.info(f"   * Total: {all_employees.count()}")
         logger.info("="*60)
         
     except Exception as e:
         logger.error("="*60)
-        logger.error(f"❌ Error in absent marking task: {str(e)}", exc_info=True)
+        logger.error(f"Error in absent marking task: {str(e)}", exc_info=True)
         logger.error("="*60)
 
 
@@ -126,7 +126,7 @@ def start_scheduler():
         misfire_grace_time=60  # Allow up to 60 seconds delay
     )
     
-    logger.info("📅 Scheduler started! Absent marking will run daily at 10:45 AM IST")
+    logger.info("Scheduler started! Absent marking will run daily at 10:45 AM IST")
     logger.info("   Configuration: max_instances=1, coalesce=True (prevents duplicates)")
     scheduler.start()
     

@@ -1753,6 +1753,7 @@ def get_award(request, pk):
     return JsonResponse(data)
 
 
+@csrf_exempt
 def delete_award(request, pk):
     if request.method == "DELETE":
         award = get_object_or_404(Award, pk=pk)

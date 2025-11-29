@@ -229,7 +229,12 @@ LOGGING = {
             'propagate': False,
         },
         'accounts': {
-            'handlers': ['console', 'file'],
+            'handlers': ['file'],  # Removed 'console' to suppress messages in terminal
+            'level': 'INFO',
+            'propagate': False,
+        },
+        'accounts.scheduler': {
+            'handlers': ['file'],  # Only log to file, not console
             'level': 'INFO',
             'propagate': False,
         },
