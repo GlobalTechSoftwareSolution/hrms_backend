@@ -18,6 +18,7 @@ from accounts.views import (
     HolidayViewSet, list_absent_employees, CareerViewSet, AppliedJobViewSet, 
     transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, create_pettycash, 
     list_pettycash, get_pettycash, update_pettycash, delete_pettycash,
+    contact_view, 
 )
 
 urlpatterns = [
@@ -25,6 +26,7 @@ urlpatterns = [
     path('login/', LoginView.as_view(), name='login'),
     path('approve/', approve_user),
     path('reject/', reject_user),
+    path('contact/', contact_view, name='contact'),  
 
     path('departments/', DepartmentViewSet.as_view({'get': 'list', 'post': 'create'})),
     path('departments/<int:pk>/', DepartmentViewSet.as_view({'get': 'retrieve', 'patch': 'partial_update', 'delete': 'destroy'})),

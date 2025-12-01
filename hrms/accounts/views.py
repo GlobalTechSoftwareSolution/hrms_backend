@@ -1302,12 +1302,6 @@ def update_project(request, pk):
     except Project.DoesNotExist:
         return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
 
-    serializer = ProjectSerializer(project, data=request.data, partial=True)
-    if serializer.is_valid():
-        serializer.save()
-        return Response({"message": "Project updated successfully", "project": serializer.data}, status=status.HTTP_200_OK)
-    else:
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @csrf_exempt
@@ -3586,3 +3580,91 @@ def delete_pettycash(request, id):
     
     record.delete()
     return Response({'message': 'Petty cash record deleted successfully.'}, status=status.HTTP_204_NO_CONTENT)
+
+
+@csrf_exempt
+def contact_view(request):
+    if request.method == 'POST':
+        try:
+            # Parse JSON data from request body
+            data = json.loads(request.body)
+            
+            # Extract form fields
+            name = data.get('name', '')
+            email = data.get('email', '')
+            phone = data.get('phone', '')
+            message = data.get('message', '')
+            
+            # Validate required fields
+            if not name or not email or not phone or not message:
+                return JsonResponse({
+                    'error': 'All fields are required'
+                }, status=400)
+            
+            # Send confirmation email to the user
+            user_subject = "Thank You for Contacting Us"
+            user_message = f"""
+Dear {name},
+
+Thank you for reaching out to us. We have received your message and will get back to you soon.
+
+Your message:
+"{message}"
+
+Best regards,
+Global Tech Software Solutions Team
+            """
+            
+            # Send notification email to company
+            company_subject = "New Contact Form Submission"
+            company_message = f"""
+A new contact form submission has been received:
+
+Name: {name}
+Email: {email}
+Phone: {phone}
+Message: {message}
+
+Please follow up with this customer at your earliest convenience.
+            """
+            
+            # Get company email from settings or use default
+            company_email = getattr(settings, 'DEFAULT_FROM_EMAIL', 'info@globaltechsoftwaresolutions.com')
+            
+            # Send emails
+            # Confirmation email to user
+            send_mail(
+                user_subject,
+                user_message,
+                company_email,
+                [email],
+                fail_silently=False,
+            )
+            
+            # Notification email to company
+            send_mail(
+                company_subject,
+                company_message,
+                company_email,
+                [company_email],
+                fail_silently=False,
+            )
+            
+            # Return success response
+            return JsonResponse({
+                'message': 'Thank you for your message! We\'ll get back to you soon.'
+            }, status=200)
+            
+        except json.JSONDecodeError:
+            return JsonResponse({
+                'error': 'Invalid JSON data'
+            }, status=400)
+        except Exception as e:
+            return JsonResponse({
+                'error': f'An error occurred while processing your request: {str(e)}'
+            }, status=500)
+    
+    # Return error for non-POST requests
+    return JsonResponse({
+        'error': 'Only POST requests are allowed'
+    }, status=405)
