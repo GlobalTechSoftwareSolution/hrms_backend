@@ -741,3 +741,45 @@ class PettyCash(models.Model):
 
     def __str__(self):
         return f"PettyCash #{self.id} - {self.fullname or self.email.email} ({self.amount})"
+
+
+class Shift(models.Model):
+    SHIFT_CHOICES = [
+        ('Morning', 'Morning'),
+        ('Evening', 'Evening'),
+        ('Night', 'Night'),
+    ]
+    
+    shift_id = models.AutoField(primary_key=True)
+    date = models.DateField()
+    time = models.TimeField()
+    emp_email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='employee_shifts')
+    emp_name = models.CharField(max_length=255)
+    manager_email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='manager_shifts')
+    manager_name = models.CharField(max_length=255)
+    shift = models.CharField(max_length=10, choices=SHIFT_CHOICES)
+
+    class Meta:
+        ordering = ['-date', '-time']
+        unique_together = ('emp_email', 'date', 'time')
+
+    def __str__(self):
+        return f"{self.emp_name} - {self.shift} shift on {self.date} at {self.time}"
+
+    def save(self, *args, **kwargs):
+        # Automatically populate emp_name and manager_name if not provided
+        if not self.emp_name and self.emp_email:
+            try:
+                employee = self.emp_email.employee
+                self.emp_name = employee.fullname
+            except Employee.DoesNotExist:
+                self.emp_name = self.emp_email.email.split('@')[0]
+        
+        if not self.manager_name and self.manager_email:
+            try:
+                manager = self.manager_email.manager
+                self.manager_name = manager.fullname
+            except Manager.DoesNotExist:
+                self.manager_name = self.manager_email.email.split('@')[0]
+        
+        super().save(*args, **kwargs)

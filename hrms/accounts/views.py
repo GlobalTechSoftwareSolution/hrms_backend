@@ -39,14 +39,14 @@ from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
     Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails, AppliedJobs, 
-    RaiseRequestAttendance, JobPosting, PettyCash
+    RaiseRequestAttendance, JobPosting, PettyCash, Shift
 )
 
 # Serializers
 from .serializers import (
     UserSerializer, CEOSerializer, HRSerializer, ManagerSerializer, DepartmentSerializer,
     EmployeeSerializer, SuperUserCreateSerializer, UserRegistrationSerializer, ProjectSerializer,
-    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer, PettyCashSerializer
+    AdminSerializer, ReportSerializer, RegisterSerializer, DocumentSerializer, AwardSerializer, TicketSerializer, EmployeeDetailsSerializer, HolidaySerializer, AbsentEmployeeDetailsSerializer, CareerSerializer, AppliedJobSerializer, ReleavedEmployeeSerializer, PettyCashSerializer, ShiftSerializer
 )
 
 # Ensure User model points to custom one
@@ -55,7 +55,9 @@ User = get_user_model()
 # Constants
 OFFICE_LAT = 13.068906816007116
 OFFICE_LON = 77.55541294505542
-LOCATION_RADIUS_METERS = 1000  # 100m allowed radius
+LOCATION_RADIUS_METERS = 1000  # 1000m allowed radius
+from .constants import IST, CHECK_IN_START, CHECK_IN_DEADLINE
+
 from .constants import IST, CHECK_IN_START, CHECK_IN_DEADLINE
 
 
@@ -3711,3 +3713,87 @@ Please follow up with this customer at your earliest convenience.
     return JsonResponse({
         'error': 'Only POST requests are allowed'
     }, status=405)
+
+
+# Shift Views
+@api_view(['POST'])
+def create_shift(request):
+    """Create a new shift"""
+    try:
+        serializer = ShiftSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# Shift Views
+@api_view(['POST'])
+@csrf_exempt
+def create_shift(request):
+    """Create a new shift"""
+    try:
+        serializer = ShiftSerializer(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_201_CREATED)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def list_shifts(request):
+    """List all shifts"""
+    try:
+        shifts = Shift.objects.all()
+        serializer = ShiftSerializer(shifts, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def get_shift(request, shift_id):
+    """Get a specific shift by ID"""
+    try:
+        shift = Shift.objects.get(shift_id=shift_id)
+        serializer = ShiftSerializer(shift)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+    except Shift.DoesNotExist:
+        return Response({"error": "Shift not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PATCH'])
+@csrf_exempt
+def update_shift(request, shift_id):
+    """Update a specific shift by ID"""
+    try:
+        shift = Shift.objects.get(shift_id=shift_id)
+        serializer = ShiftSerializer(shift, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    except Shift.DoesNotExist:
+        return Response({"error": "Shift not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+@csrf_exempt
+def delete_shift(request, shift_id):
+    """Delete a specific shift by ID"""
+    try:
+        shift = Shift.objects.get(shift_id=shift_id)
+        shift.delete()
+        return Response({"message": "Shift deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
+    except Shift.DoesNotExist:
+        return Response({"error": "Shift not found"}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
