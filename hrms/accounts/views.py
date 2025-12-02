@@ -3717,83 +3717,127 @@ Please follow up with this customer at your earliest convenience.
 
 # Shift Views
 @api_view(['POST'])
-def create_shift(request):
-    """Create a new shift"""
-    try:
-        serializer = ShiftSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-# Shift Views
-@api_view(['POST'])
 @csrf_exempt
 def create_shift(request):
-    """Create a new shift"""
-    try:
+    """
+    Create a new shift
+    """
+    if request.method == 'POST':
         serializer = ShiftSerializer(data=request.data)
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_201_CREATED)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+
+@api_view(['POST'])
+@csrf_exempt
+def bulk_create_shifts(request):
+    """
+    Bulk create shifts
+    """
+    if request.method == 'POST':
+        shifts_data = request.data.get('shifts', [])
+        if not shifts_data:
+            return Response({'error': 'No shifts data provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        created_shifts = []
+        errors = []
+        
+        for i, shift_data in enumerate(shifts_data):
+            serializer = ShiftSerializer(data=shift_data)
+            if serializer.is_valid():
+                serializer.save()
+                created_shifts.append(serializer.data)
+            else:
+                errors.append({
+                    'index': i,
+                    'errors': serializer.errors
+                })
+        
+        response_data = {
+            'created_shifts': created_shifts,
+            'errors': errors
+        }
+        
+        if errors:
+            return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
+        else:
+            return Response(response_data, status=status.HTTP_201_CREATED)
 
 @api_view(['GET'])
 def list_shifts(request):
-    """List all shifts"""
-    try:
+    """
+    List all shifts
+    """
+    if request.method == 'GET':
         shifts = Shift.objects.all()
         serializer = ShiftSerializer(shifts, many=True)
-        return Response(serializer.data, status=status.HTTP_200_OK)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(serializer.data)
 
 
 @api_view(['GET'])
 def get_shift(request, shift_id):
-    """Get a specific shift by ID"""
+    """
+    Get a specific shift by ID
+    """
     try:
         shift = Shift.objects.get(shift_id=shift_id)
-        serializer = ShiftSerializer(shift)
-        return Response(serializer.data, status=status.HTTP_200_OK)
     except Shift.DoesNotExist:
-        return Response({"error": "Shift not found"}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    serializer = ShiftSerializer(shift)
+    return Response(serializer.data)
 
 
 @api_view(['PATCH'])
 @csrf_exempt
 def update_shift(request, shift_id):
-    """Update a specific shift by ID"""
+    """
+    Update a specific shift
+    """
     try:
         shift = Shift.objects.get(shift_id=shift_id)
-        serializer = ShiftSerializer(shift, data=request.data, partial=True)
-        if serializer.is_valid():
-            serializer.save()
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     except Shift.DoesNotExist:
-        return Response({"error": "Shift not found"}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    serializer = ShiftSerializer(shift, data=request.data, partial=True)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 @api_view(['DELETE'])
 @csrf_exempt
 def delete_shift(request, shift_id):
-    """Delete a specific shift by ID"""
+    """
+    Delete a specific shift
+    """
     try:
         shift = Shift.objects.get(shift_id=shift_id)
-        shift.delete()
-        return Response({"message": "Shift deleted successfully"}, status=status.HTTP_204_NO_CONTENT)
     except Shift.DoesNotExist:
-        return Response({"error": "Shift not found"}, status=status.HTTP_404_NOT_FOUND)
-    except Exception as e:
-        return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(status=status.HTTP_404_NOT_FOUND)
+    
+    shift.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@api_view(['DELETE'])
+@csrf_exempt
+def bulk_delete_shifts(request):
+    """
+    Bulk delete shifts by IDs
+    """
+    if request.method == 'DELETE':
+        shift_ids = request.data.get('shift_ids', [])
+        if not shift_ids:
+            return Response({'error': 'No shift IDs provided'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Delete shifts with provided IDs
+        deleted_count, _ = Shift.objects.filter(shift_id__in=shift_ids).delete()
+        
+        return Response({
+            'message': f'Successfully deleted {deleted_count} shifts',
+            'deleted_count': deleted_count
+        }, status=status.HTTP_200_OK)

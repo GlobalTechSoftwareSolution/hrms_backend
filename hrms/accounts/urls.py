@@ -19,7 +19,7 @@ from accounts.views import (
     transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, create_pettycash, 
     list_pettycash, get_pettycash, update_pettycash, delete_pettycash,
     contact_view, geocoding_view,
-    create_shift, list_shifts, get_shift, update_shift, delete_shift
+    create_shift, list_shifts, get_shift, update_shift, delete_shift, bulk_create_shifts, bulk_delete_shifts
 )
 
 urlpatterns = [
@@ -145,7 +145,9 @@ urlpatterns = [
     
     path('list_shifts/', list_shifts, name='list-shifts'),
     path('create_shift/', create_shift, name='create-shift'),
+    path('bulk_create_shifts/', bulk_create_shifts, name='bulk-create-shifts'),
     path('get_shift/<int:shift_id>/', get_shift, name='get-shift'),
     path('update_shift/<int:shift_id>/', update_shift, name='update-shift'),
     path('delete_shift/<int:shift_id>/', delete_shift, name='delete-shift'),
+    path('bulk_delete_shifts/', bulk_delete_shifts, name='bulk-delete-shifts'),
 ]

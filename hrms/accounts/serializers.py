@@ -245,4 +245,9 @@ class PettyCashSerializer(serializers.ModelSerializer):
 class ShiftSerializer(serializers.ModelSerializer):
     class Meta:
         model = Shift
-        fields = '__all__'
+        fields = ['shift_id', 'date', 'start_time', 'end_time', 'emp_email', 'emp_name', 'manager_email', 'manager_name', 'shift']
+        read_only_fields = ['emp_name', 'manager_name']
+
+    def create(self, validated_data):
+        # Names will be automatically populated in the model's save method
+        return Shift.objects.create(**validated_data)

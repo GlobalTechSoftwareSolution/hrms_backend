@@ -752,34 +752,39 @@ class Shift(models.Model):
     
     shift_id = models.AutoField(primary_key=True)
     date = models.DateField()
-    time = models.TimeField()
+    start_time = models.TimeField()
+    end_time = models.TimeField()
     emp_email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='employee_shifts')
-    emp_name = models.CharField(max_length=255)
+    emp_name = models.CharField(max_length=255, blank=True)
     manager_email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email', related_name='manager_shifts')
-    manager_name = models.CharField(max_length=255)
+    manager_name = models.CharField(max_length=255, blank=True)
     shift = models.CharField(max_length=10, choices=SHIFT_CHOICES)
 
-    class Meta:
-        ordering = ['-date', '-time']
-        unique_together = ('emp_email', 'date', 'time')
-
-    def __str__(self):
-        return f"{self.emp_name} - {self.shift} shift on {self.date} at {self.time}"
-
     def save(self, *args, **kwargs):
-        # Automatically populate emp_name and manager_name if not provided
+        # Automatically populate employee and manager names if not provided
         if not self.emp_name and self.emp_email:
             try:
-                employee = self.emp_email.employee
-                self.emp_name = employee.fullname
+                employee = Employee.objects.get(email=self.emp_email)
+                self.emp_name = employee.fullname or ""
             except Employee.DoesNotExist:
-                self.emp_name = self.emp_email.email.split('@')[0]
+                # Fallback to user's email if Employee record doesn't exist
+                self.emp_name = self.emp_email.email
         
         if not self.manager_name and self.manager_email:
             try:
-                manager = self.manager_email.manager
-                self.manager_name = manager.fullname
+                manager = Manager.objects.get(email=self.manager_email)
+                self.manager_name = manager.fullname or ""
             except Manager.DoesNotExist:
-                self.manager_name = self.manager_email.email.split('@')[0]
+                # Try Employee table as fallback
+                try:
+                    manager = Employee.objects.get(email=self.manager_email)
+                    self.manager_name = manager.fullname or ""
+                except Employee.DoesNotExist:
+                    # Fallback to user's email if no record exists
+                    self.manager_name = self.manager_email.email
         
         super().save(*args, **kwargs)
+
+    class Meta:
+        ordering = ['-date', '-start_time']
+        unique_together = ('emp_email', 'date', 'start_time')
