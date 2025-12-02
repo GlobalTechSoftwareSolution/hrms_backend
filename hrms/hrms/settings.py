@@ -240,3 +240,6 @@ LOGGING = {
         },
     },
 }
+
+# LocationIQ API Key
+LOCATIONIQ_API_KEY = config('LOCATIONIQ_API_KEY')

@@ -1562,6 +1562,49 @@ def update_document(request, email):
         return JsonResponse({"message": "No files uploaded"}, status=400)
 
 
+@csrf_exempt
+def geocoding_view(request):
+    if request.method == 'GET':
+        # Get latitude and longitude from query parameters
+        lat = request.GET.get('lat')
+        lon = request.GET.get('lon')
+        
+        # Validate required parameters
+        if not lat or not lon:
+            return JsonResponse({
+                'error': 'Latitude and longitude are required'
+            }, status=400)
+        
+        try:
+            # Using LocationIQ API for reverse geocoding
+            API_KEY = getattr(settings, 'LOCATIONIQ_API_KEY')
+            url = f"https://us1.locationiq.com/v1/reverse?key={API_KEY}&lat={lat}&lon={lon}&format=json&addressdetails=1"
+            
+            # Make the API request
+            response = requests.get(url)
+            
+            if not response.ok:
+                return JsonResponse({
+                    'error': 'Failed to fetch address'
+                }, status=500)
+            
+            # Parse the response
+            data = response.json()
+            
+            # Return the geocoding data
+            return JsonResponse(data, status=200)
+            
+        except Exception as e:
+            print('Reverse geocoding error:', str(e))
+            return JsonResponse({
+                'error': 'Error retrieving address'
+            }, status=500)
+    
+    # Return error for non-GET requests
+    return JsonResponse({
+        'error': 'Only GET requests are allowed'
+    }, status=405)
+
 
 # DELETE Document
 @csrf_exempt
