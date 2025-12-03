@@ -775,13 +775,18 @@ class Shift(models.Model):
                 manager = Manager.objects.get(email=self.manager_email)
                 self.manager_name = manager.fullname or ""
             except Manager.DoesNotExist:
-                # Try Employee table as fallback
+                # Try CEO table as fallback
                 try:
-                    manager = Employee.objects.get(email=self.manager_email)
-                    self.manager_name = manager.fullname or ""
-                except Employee.DoesNotExist:
-                    # Fallback to user's email if no record exists
-                    self.manager_name = self.manager_email.email
+                    ceo = CEO.objects.get(email=self.manager_email)
+                    self.manager_name = ceo.fullname or ""
+                except CEO.DoesNotExist:
+                    # Try Employee table as fallback
+                    try:
+                        manager = Employee.objects.get(email=self.manager_email)
+                        self.manager_name = manager.fullname or ""
+                    except Employee.DoesNotExist:
+                        # Fallback to user's email if no record exists
+                        self.manager_name = self.manager_email.email
         
         super().save(*args, **kwargs)
 
