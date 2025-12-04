@@ -1207,7 +1207,7 @@ class RegisterView(generics.CreateAPIView):
 def list_attendance(request):
     """List all attendance records"""
     attendance_records = Attendance.objects.all().order_by('-date')
-
+    
     result = []
     for record in attendance_records:
         result.append({
@@ -1218,9 +1218,10 @@ def list_attendance(request):
             "date": str(record.date),
             "check_in": str(record.check_in) if record.check_in else None,
             "check_out": str(record.check_out) if record.check_out else None,
-            "photo": record.photo if record.photo else None,
+            "check_in_photo": record.check_in_photo if record.check_in_photo else None,
+            "check_out_photo": record.check_out_photo if record.check_out_photo else None,
         })
-
+    
     return JsonResponse({"attendance": result}, status=200)
 
 
@@ -1229,7 +1230,7 @@ def get_attendance(request, email):
     """Get attendance records for a specific email"""
     user = get_object_or_404(User, email=email)
     attendance_records = Attendance.objects.filter(email=user).order_by('-date')
-
+    
     result = []
     for record in attendance_records:
         result.append({
@@ -1240,9 +1241,10 @@ def get_attendance(request, email):
             "date": str(record.date),
             "check_in": str(record.check_in) if record.check_in else None,
             "check_out": str(record.check_out) if record.check_out else None,
-            "photo": record.photo if record.photo else None,
+            "check_in_photo": record.check_in_photo if record.check_in_photo else None,
+            "check_out_photo": record.check_out_photo if record.check_out_photo else None,
         })
-
+    
     return JsonResponse({"attendance": result}, status=200)
 
 
