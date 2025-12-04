@@ -2069,7 +2069,7 @@ def mark_office_attendance_view(request):
                                     content_type = getattr(uploaded_file, 'content_type', 'image/jpeg')
                                     photo_url = upload_attendance_photo(tmp_path, person.email.email, today, content_type=content_type)
                                     if photo_url:
-                                        existing.photo = photo_url
+                                        existing.check_out_photo = photo_url
                                 except Exception as e:
                                     print(f"Failed uploading temp file for attendance on check-out: {e}")
 
@@ -2132,13 +2132,13 @@ def mark_office_attendance_view(request):
                             "latitude": latitude,
                             "longitude": longitude,
                             "location_type": "office",
-                            "photo": photo_url,
+                            "check_in_photo": photo_url,
                         }
                     )
                     # Ensure photo_url is saved even if object already existed
                     if photo_url:
                         try:
-                            obj.photo = photo_url
+                            obj.check_in_photo = photo_url
                             obj.save()
                         except Exception as e:
                             print(f"Failed to save photo URL to Attendance: {e}")
@@ -2154,8 +2154,8 @@ def mark_office_attendance_view(request):
                             obj.longitude = longitude
                             obj.location_type = "office"
                             # Update photo on checkout if it wasn't set during check-in
-                            if not obj.photo and photo_url:
-                                obj.photo = photo_url
+                            if not obj.check_in_photo and photo_url:
+                                obj.check_out_photo = photo_url
                                 print(f"Updated photo URL on checkout: {photo_url}")
                             obj.save()
                             msg = f"Office check-out marked for {person.fullname}"
@@ -2259,7 +2259,7 @@ def mark_work_attendance_view(request):
                                     content_type = getattr(uploaded_file, 'content_type', 'image/jpeg')
                                     photo_url = upload_attendance_photo(tmp_path, person.email.email, today, content_type=content_type)
                                     if photo_url:
-                                        existing.photo = photo_url
+                                        existing.check_out_photo = photo_url
                                 except Exception as e:
                                     print(f"Failed uploading temp file for work check-out: {e}")
 
@@ -2318,19 +2318,19 @@ def mark_work_attendance_view(request):
                             "check_in": now_time,
                             "latitude": latitude,
                             "longitude": longitude,
-                            "location_type": "office",
-                            "photo": photo_url,
+                            "location_type": "work",
+                            "check_in_photo": photo_url,
                         }
                     )
                     # Ensure photo_url is saved even if object already existed
                     if photo_url:
                         try:
-                            obj.photo = photo_url
+                            obj.check_in_photo = photo_url
                             obj.save()
                         except Exception as e:
                             print(f"Failed to save photo URL to Attendance: {e}")
 
-                    print(f"Attendance object created: {created}, Photo URL in DB: {obj.photo}")
+                    print(f"Attendance object created: {created}, Photo URL in DB: {obj.check_in_photo}")
 
                     if created:
                         msg = f"Work from home check-in marked for {person.fullname}"
@@ -2342,8 +2342,8 @@ def mark_work_attendance_view(request):
                             obj.longitude = longitude
                             obj.location_type = "work"
                             # Update photo on checkout if it wasn't set during check-in
-                            if not obj.photo and photo_url:
-                                obj.photo = photo_url
+                            if not obj.check_in_photo and photo_url:
+                                obj.check_out_photo = photo_url
                             obj.save()
                             msg = f"Work from home check-out marked for {person.fullname}"
                     os.remove(tmp_path)
