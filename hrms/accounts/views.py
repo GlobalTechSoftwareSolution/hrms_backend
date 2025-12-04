@@ -14,6 +14,8 @@ from accounts.models import Document
 from django.shortcuts import get_object_or_404, render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
+from django.views.decorators.cache import cache_page
+from django.core.cache import cache
 from django.contrib.auth import authenticate, get_user_model
 from django.utils.dateparse import parse_date
 from django.contrib.auth.tokens import PasswordResetTokenGenerator
@@ -1204,9 +1206,21 @@ class RegisterView(generics.CreateAPIView):
 
 
 @require_GET
+@cache_page(60 * 5)  # Cache for 5 minutes
 def list_attendance(request):
-    """List all attendance records"""
-    attendance_records = Attendance.objects.all().order_by('-date')
+    """List all attendance records with pagination and caching"""
+    # Get page and page size from query parameters, with defaults
+    page = int(request.GET.get('page', 1))
+    page_size = min(int(request.GET.get('page_size', 20)), 100)  # Default 20 items per page
+    
+    # Calculate offset
+    offset = (page - 1) * page_size
+    
+    # Get total count
+    total_count = Attendance.objects.count()
+    
+    # Get paginated records
+    attendance_records = Attendance.objects.all().order_by('-date')[offset:offset + page_size]
     
     result = []
     for record in attendance_records:
@@ -1222,7 +1236,20 @@ def list_attendance(request):
             "check_out_photo": record.check_out_photo if record.check_out_photo else None,
         })
     
-    return JsonResponse({"attendance": result}, status=200)
+    # Calculate pagination info
+    total_pages = (total_count + page_size - 1) // page_size
+    
+    response_data = {
+        "attendance": result,
+        "pagination": {
+            "current_page": page,
+            "page_size": page_size,
+            "total_pages": total_pages,
+            "total_count": total_count
+        }
+    }
+    
+    return JsonResponse(response_data, status=200)
 
 
 @require_GET

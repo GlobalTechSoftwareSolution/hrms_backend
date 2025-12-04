@@ -199,6 +199,26 @@ LOGO_URL = config('LOGO_URL', default='')
 MEDIA_URL = config('MEDIA_URL', default='/media/')
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# Caching Configuration
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'unique-snowflake',
+        'TIMEOUT': 300,  # 5 minutes
+        'OPTIONS': {
+            'MAX_ENTRIES': 1000,
+        }
+    }
+}
+
+# Cache Middleware (optional)
+# MIDDLEWARE = [
+#     'django.middleware.cache.UpdateCacheMiddleware',
+#     'django.middleware.common.CommonMiddleware',
+#     'django.middleware.cache.FetchFromCacheMiddleware',
+#     # ... other middleware
+# ]
+
 # Logging configuration
 LOGGING = {
     'version': 1,

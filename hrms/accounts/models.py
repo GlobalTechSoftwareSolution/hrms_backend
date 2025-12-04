@@ -224,7 +224,6 @@ class Attendance(models.Model):
     location_type = models.CharField(max_length=10, choices=LOCATION_TYPE_CHOICES, default='office')
     check_in_photo = models.URLField(max_length=500, null=True, blank=True, help_text="Photo taken during check-in")
     check_out_photo = models.URLField(max_length=500, null=True, blank=True, help_text="Photo taken during check-out")
-    face_recognition_success = models.BooleanField(default=False, help_text="Indicates if face recognition was successful for this attendance record")
 
     CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
