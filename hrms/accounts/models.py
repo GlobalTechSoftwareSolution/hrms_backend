@@ -2,7 +2,7 @@ from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, PermissionsMixin, BaseUserManager
 from django.utils import timezone
 from django.core.exceptions import ValidationError
-from datetime import datetime, time
+from datetime import datetime, timedelta
 
 # ------------------- USER -------------------
 class UserManager(BaseUserManager):
@@ -222,6 +222,8 @@ class Attendance(models.Model):
     latitude = models.FloatField(null=True, blank=True)
     longitude = models.FloatField(null=True, blank=True)
     location_type = models.CharField(max_length=10, choices=LOCATION_TYPE_CHOICES, default='office')
+    photo = models.URLField(max_length=500, null=True, blank=True)
+    face_recognition_success = models.BooleanField(default=False, help_text="Indicates if face recognition was successful for this attendance record")
 
     CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
 
@@ -230,6 +232,25 @@ class Attendance(models.Model):
         indexes = [
             models.Index(fields=['email', 'date'])
         ]
+
+    def clean(self):
+        # Validate that check_out is at least 15 minutes after check_in
+        if self.check_in and self.check_out:
+            # Convert time objects to datetime for comparison
+            today = timezone.localdate()
+            check_in_datetime = datetime.combine(today, self.check_in)
+            check_out_datetime = datetime.combine(today, self.check_out)
+            
+            # If check_out is on the next day (crossing midnight), adjust
+            if check_out_datetime < check_in_datetime:
+                check_out_datetime += timedelta(days=1)
+            
+            # Calculate the minimum checkout time (15 minutes after checkin)
+            min_checkout_datetime = check_in_datetime + timedelta(minutes=15)
+            
+            # Validate the constraint
+            if check_out_datetime < min_checkout_datetime:
+                raise ValidationError("Check-out time must be at least 15 minutes after check-in time.")
 
     def save(self, *args, **kwargs):
         # Fill fullname and department from Employee
@@ -241,6 +262,9 @@ class Attendance(models.Model):
             except Employee.DoesNotExist:
                 pass
 
+        # Call clean to validate the model
+        self.clean()
+        
         super().save(*args, **kwargs)
 
     def __str__(self):

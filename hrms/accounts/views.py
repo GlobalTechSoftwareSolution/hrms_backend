@@ -27,6 +27,7 @@ from django.db.models import Q
 from django.db import models, IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.http.multipartparser import MultiPartParser, MultiPartParserError
+from django.core.exceptions import ValidationError
 
 from rest_framework import status, viewsets, generics, filters
 from rest_framework.views import APIView
@@ -72,6 +73,60 @@ def verify_location(latitude, longitude, radius_meters=None):
     
     return distance_meters <= radius_meters, distance_meters
 
+def upload_attendance_photo(file_path_or_obj, email, date, content_type=None):
+    """
+    Upload attendance photo to MinIO and return the URL.
+
+    - If `file_path_or_obj` is a string path to a file, use `upload_file` (preferred).
+    - If it's a file-like object, fall back to `upload_fileobj`.
+    """
+    try:
+        print(f"Uploading attendance photo for {email} on {date}")
+        client = get_s3_client()
+        bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+        base_bucket_url = settings.BASE_BUCKET_URL
+        print(f"MinIO config - Bucket: {bucket_name}, Base URL: {base_bucket_url}")
+
+        # Generate a unique filename for the attendance photo
+        filename = f"attendance_{email}_{date.isoformat()}_{int(timezone.now().timestamp())}.jpg"
+        # store under attendance/<date>/<email>/ to make per-day browsing easier
+        key = f"attendance/{date.isoformat()}/{email}/{filename}"
+        print(f"Generated key: {key}")
+
+        # If given a path, use upload_file which reads from disk reliably
+        if isinstance(file_path_or_obj, str) and os.path.exists(file_path_or_obj):
+            print(f"Uploading from file path: {file_path_or_obj}")
+            extra_args = {}
+            if content_type:
+                extra_args['ContentType'] = content_type
+            # Ensure bucket exists (idempotent)
+            try:
+                client.head_bucket(Bucket=bucket_name)
+            except Exception:
+                try:
+                    client.create_bucket(Bucket=bucket_name)
+                except Exception:
+                    pass
+
+            client.upload_file(file_path_or_obj, bucket_name, key, ExtraArgs=extra_args if extra_args else None)
+        else:
+            # fall back to file-like object
+            content_type = content_type or getattr(file_path_or_obj, 'content_type', 'image/jpeg')
+            print(f"Uploading file-like object with content type: {content_type}")
+            client.upload_fileobj(file_path_or_obj, bucket_name, key, ExtraArgs={"ContentType": content_type})
+
+        print("File uploaded successfully")
+
+        # Return the full URL
+        url = f"{base_bucket_url}{key}"
+        print(f"Generated URL: {url}")
+        return url
+    except Exception as e:
+        print(f"Error uploading attendance photo: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return None
+
 
 class SignupView(APIView):
     def post(self, request):
@@ -88,13 +143,10 @@ class LoginView(APIView):
         password = request.data.get('password')
         role = request.data.get('role')
         if not email or not password or not role:
-            return Response(
-                {'error': 'Email, password, and role are required'}, 
-                status=status.HTTP_400_BAD_REQUEST
-            )
+            return Response({'error': 'Email, password, and role are required'}, status=status.HTTP_400_BAD_REQUEST)
         user = authenticate(request, username=email, password=password)  # assumes USERNAME_FIELD='email'
         if user is not None:
-            # Check if user has the role attribute before accessing it
+            # Check role if present on user
             if hasattr(user, 'role') and getattr(user, 'role', None) != role:
                 return Response({'error': 'Role does not match'}, status=status.HTTP_403_FORBIDDEN)
             serializer = UserSerializer(user)
@@ -116,6 +168,84 @@ class CreateSuperUserView(APIView):
                 status=status.HTTP_201_CREATED
             )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+# --- Minimal FCM endpoint stubs to satisfy URL imports ---
+@api_view(['POST'])
+@csrf_exempt
+def register_fcm_token(request):
+    """Stub: Register an FCM token for a user. Returns success without persistence."""
+    token = request.data.get('token')
+    email = request.data.get('email')
+    if not token or not email:
+        return Response({'error': 'Both token and email are required'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'FCM token registered (stub)', 'email': email, 'token': token}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@csrf_exempt
+def unregister_fcm_token(request):
+    """Stub: Unregister an FCM token. Returns success without persistence."""
+    token = request.data.get('token')
+    email = request.data.get('email')
+    if not token or not email:
+        return Response({'error': 'Both token and email are required'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'FCM token unregistered (stub)', 'email': email, 'token': token}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@csrf_exempt
+def send_notification_to_user(request):
+    """Stub: Send a notification to a single user. Does not call FCM in this stub."""
+    email = request.data.get('email')
+    title = request.data.get('title')
+    message = request.data.get('message')
+    if not email or not title or not message:
+        return Response({'error': 'email, title and message are required'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Notification sent (stub)', 'email': email, 'title': title}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@csrf_exempt
+def send_notification_to_multiple_users(request):
+    """Stub: Send notification to multiple users."""
+    emails = request.data.get('emails')
+    title = request.data.get('title')
+    message = request.data.get('message')
+    if not emails or not isinstance(emails, list) or not title or not message:
+        return Response({'error': 'emails(list), title and message are required'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Notifications sent (stub)', 'count': len(emails)}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@csrf_exempt
+def send_broadcast_notification(request):
+    """Stub: Broadcast a notification to all users."""
+    title = request.data.get('title')
+    message = request.data.get('message')
+    if not title or not message:
+        return Response({'error': 'title and message are required'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Broadcast sent (stub)'}, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+def get_user_notifications(request):
+    """Stub: Return empty list of notifications for a user."""
+    email = request.GET.get('email')
+    if not email:
+        return Response({'error': 'email is required as query param'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'notifications': []}, status=status.HTTP_200_OK)
+
+
+@api_view(['POST'])
+@csrf_exempt
+def mark_notification_as_read(request):
+    """Stub: Mark a notification as read. No-op in stub."""
+    notification_id = request.data.get('notification_id')
+    email = request.data.get('email')
+    if not notification_id or not email:
+        return Response({'error': 'notification_id and email are required'}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Notification marked as read (stub)', 'notification_id': notification_id}, status=status.HTTP_200_OK)
 
 
 @api_view(['POST'])
@@ -1088,6 +1218,7 @@ def list_attendance(request):
             "date": str(record.date),
             "check_in": str(record.check_in) if record.check_in else None,
             "check_out": str(record.check_out) if record.check_out else None,
+            "photo": record.photo if record.photo else None,
         })
 
     return JsonResponse({"attendance": result}, status=200)
@@ -1109,6 +1240,7 @@ def get_attendance(request, email):
             "date": str(record.date),
             "check_in": str(record.check_in) if record.check_in else None,
             "check_out": str(record.check_out) if record.check_out else None,
+            "photo": record.photo if record.photo else None,
         })
 
     return JsonResponse({"attendance": result}, status=200)
@@ -1927,15 +2059,30 @@ def mark_office_attendance_view(request):
 
                     existing = Attendance.objects.filter(email=person.email, date=today).first()
                     if existing:
+                        # If attendance already has check_out, do not change photo or re-upload
                         if existing.check_out:
                             msg = f"Attendance already marked for today ({person.fullname})"
                         else:
+                            # If there's an uploaded file, try to upload it and save URL
+                            if uploaded_file:
+                                try:
+                                    content_type = getattr(uploaded_file, 'content_type', 'image/jpeg')
+                                    photo_url = upload_attendance_photo(tmp_path, person.email.email, today, content_type=content_type)
+                                    if photo_url:
+                                        existing.photo = photo_url
+                                except Exception as e:
+                                    print(f"Failed uploading temp file for attendance on check-out: {e}")
+
                             existing.check_out = now_time
                             existing.latitude = latitude
                             existing.longitude = longitude
                             existing.location_type = "office"
-                            existing.save()
-                            msg = f"Office check-out marked for {person.fullname}"
+                            try:
+                                existing.save()
+                                msg = f"Office check-out marked for {person.fullname}"
+                            except ValidationError as e:
+                                os.remove(tmp_path)
+                                return JsonResponse({"status": "fail", "message": str(e)}, status=400)
                         os.remove(tmp_path)
                         return JsonResponse({"status": "success", "message": msg})
 
@@ -1965,6 +2112,17 @@ def mark_office_attendance_view(request):
                             "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
                         }, status=400)
 
+                    # Upload attendance photo to MinIO using the saved temp file
+                    photo_url = None
+                    if uploaded_file:
+                        try:
+                            # upload using the saved temp file path for reliability
+                            content_type = getattr(uploaded_file, 'content_type', 'image/jpeg')
+                            photo_url = upload_attendance_photo(tmp_path, person.email.email, today, content_type=content_type)
+                        except Exception as e:
+                            print(f"Failed uploading temp file for attendance: {e}")
+                            photo_url = None
+                    
                     # Otherwise, mark attendance
                     obj, created = Attendance.objects.get_or_create(
                         email=person.email,
@@ -1974,8 +2132,16 @@ def mark_office_attendance_view(request):
                             "latitude": latitude,
                             "longitude": longitude,
                             "location_type": "office",
+                            "photo": photo_url,
                         }
                     )
+                    # Ensure photo_url is saved even if object already existed
+                    if photo_url:
+                        try:
+                            obj.photo = photo_url
+                            obj.save()
+                        except Exception as e:
+                            print(f"Failed to save photo URL to Attendance: {e}")
 
                     if created:
                         msg = f"Office check-in marked for {person.fullname}"
@@ -1987,9 +2153,12 @@ def mark_office_attendance_view(request):
                             obj.latitude = latitude
                             obj.longitude = longitude
                             obj.location_type = "office"
+                            # Update photo on checkout if it wasn't set during check-in
+                            if not obj.photo and photo_url:
+                                obj.photo = photo_url
+                                print(f"Updated photo URL on checkout: {photo_url}")
                             obj.save()
                             msg = f"Office check-out marked for {person.fullname}"
-
                     os.remove(tmp_path)
                     return JsonResponse({"status": "success", "message": msg})
 
@@ -2080,14 +2249,29 @@ def mark_work_attendance_view(request):
 
                     existing = Attendance.objects.filter(email=person.email, date=today).first()
                     if existing:
+                        # If attendance already has check_out, do not change photo or re-upload
                         if existing.check_out:
                             msg = f"Attendance already marked for today ({person.fullname})"
                         else:
+                            # Try uploading photo on check-out if provided
+                            if uploaded_file:
+                                try:
+                                    content_type = getattr(uploaded_file, 'content_type', 'image/jpeg')
+                                    photo_url = upload_attendance_photo(tmp_path, person.email.email, today, content_type=content_type)
+                                    if photo_url:
+                                        existing.photo = photo_url
+                                except Exception as e:
+                                    print(f"Failed uploading temp file for work check-out: {e}")
+
                             existing.check_out = now_time
                             existing.longitude = longitude
                             existing.location_type = "work"
-                            existing.save()
-                            msg = f"Work from home check-out marked for {person.fullname}"
+                            try:
+                                existing.save()
+                                msg = f"Work from home check-out marked for {person.fullname}"
+                            except ValidationError as e:
+                                os.remove(tmp_path)
+                                return JsonResponse({"status": "fail", "message": str(e)}, status=400)
                         os.remove(tmp_path)
                         return JsonResponse({"status": "success", "message": msg})
 
@@ -2106,6 +2290,7 @@ def mark_work_attendance_view(request):
                             "message": "Check-in opens at 07:00 AM IST. Please try after 07:00."
                         }, status=400)
 
+                    # Check if late arrival
                     if enforce_deadline and now_time > CHECK_IN_DEADLINE:
                         AbsentEmployeeDetails.objects.get_or_create(email=person.email, date=today)
                         os.remove(tmp_path)
@@ -2114,6 +2299,18 @@ def mark_work_attendance_view(request):
                             "message": "Late first attempt. Marked absent for today as no check-in before 10:45 AM IST."
                         }, status=400)
 
+                    # Upload attendance photo to MinIO using the saved temp file
+                    photo_url = None
+                    if uploaded_file:
+                        try:
+                            content_type = getattr(uploaded_file, 'content_type', 'image/jpeg')
+                            photo_url = upload_attendance_photo(tmp_path, person.email.email, today, content_type=content_type)
+                            print(f"Photo URL generated: {photo_url}")
+                        except Exception as e:
+                            print(f"Failed uploading temp file for attendance: {e}")
+                            photo_url = None
+                    
+                    # Otherwise, mark attendance
                     obj, created = Attendance.objects.get_or_create(
                         email=person.email,
                         date=today,
@@ -2121,9 +2318,19 @@ def mark_work_attendance_view(request):
                             "check_in": now_time,
                             "latitude": latitude,
                             "longitude": longitude,
-                            "location_type": "work",
+                            "location_type": "office",
+                            "photo": photo_url,
                         }
                     )
+                    # Ensure photo_url is saved even if object already existed
+                    if photo_url:
+                        try:
+                            obj.photo = photo_url
+                            obj.save()
+                        except Exception as e:
+                            print(f"Failed to save photo URL to Attendance: {e}")
+
+                    print(f"Attendance object created: {created}, Photo URL in DB: {obj.photo}")
 
                     if created:
                         msg = f"Work from home check-in marked for {person.fullname}"
@@ -2134,9 +2341,11 @@ def mark_work_attendance_view(request):
                             obj.check_out = now_time
                             obj.longitude = longitude
                             obj.location_type = "work"
+                            # Update photo on checkout if it wasn't set during check-in
+                            if not obj.photo and photo_url:
+                                obj.photo = photo_url
                             obj.save()
                             msg = f"Work from home check-out marked for {person.fullname}"
-
                     os.remove(tmp_path)
                     return JsonResponse({"status": "success", "message": msg})
 
