@@ -1208,46 +1208,72 @@ class RegisterView(generics.CreateAPIView):
 @require_GET
 @cache_page(60 * 5)  # Cache for 5 minutes
 def list_attendance(request):
-    """List all attendance records with pagination and caching"""
-    # Get page and page size from query parameters, with defaults
-    page = int(request.GET.get('page', 1))
-    page_size = min(int(request.GET.get('page_size', 20)), 100)  # Default 20 items per page
+    """List attendance records - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
     
-    # Calculate offset
-    offset = (page - 1) * page_size
-    
-    # Get total count
-    total_count = Attendance.objects.count()
-    
-    # Get paginated records
-    attendance_records = Attendance.objects.all().order_by('-date')[offset:offset + page_size]
-    
-    result = []
-    for record in attendance_records:
-        result.append({
-            "email": record.email.email,
-            "role": record.email.role,
-            "fullname": record.fullname,
-            "department": record.department,
-            "date": str(record.date),
-            "check_in": str(record.check_in) if record.check_in else None,
-            "check_out": str(record.check_out) if record.check_out else None,
-            "check_in_photo": record.check_in_photo if record.check_in_photo else None,
-            "check_out_photo": record.check_out_photo if record.check_out_photo else None,
-        })
-    
-    # Calculate pagination info
-    total_pages = (total_count + page_size - 1) // page_size
-    
-    response_data = {
-        "attendance": result,
-        "pagination": {
-            "current_page": page,
-            "page_size": page_size,
-            "total_pages": total_pages,
-            "total_count": total_count
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Attendance.objects.count()
+        
+        # Get paginated records
+        attendance_records = Attendance.objects.all().order_by('-date')[offset:offset + page_size]
+        
+        result = []
+        for record in attendance_records:
+            result.append({
+                "email": record.email.email,
+                "role": record.email.role,
+                "fullname": record.fullname,
+                "department": record.department,
+                "date": str(record.date),
+                "check_in": str(record.check_in) if record.check_in else None,
+                "check_out": str(record.check_out) if record.check_out else None,
+                "check_in_photo": record.check_in_photo if record.check_in_photo else None,
+                "check_out_photo": record.check_out_photo if record.check_out_photo else None,
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "attendance": result,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
         }
-    }
+    else:
+        # Fetch all records if no pagination parameters
+        attendance_records = Attendance.objects.all().order_by('-date')
+        
+        result = []
+        for record in attendance_records:
+            result.append({
+                "email": record.email.email,
+                "role": record.email.role,
+                "fullname": record.fullname,
+                "department": record.department,
+                "date": str(record.date),
+                "check_in": str(record.check_in) if record.check_in else None,
+                "check_out": str(record.check_out) if record.check_out else None,
+                "check_in_photo": record.check_in_photo if record.check_in_photo else None,
+                "check_out_photo": record.check_out_photo if record.check_out_photo else None,
+            })
+        
+        response_data = {
+            "attendance": result
+        }
     
     return JsonResponse(response_data, status=200)
 
