@@ -233,24 +233,28 @@ class Attendance(models.Model):
             models.Index(fields=['email', 'date'])
         ]
 
-    def clean(self):
-        # Validate that check_out is at least 15 minutes after check_in
-        if self.check_in and self.check_out:
-            # Convert time objects to datetime for comparison
-            today = timezone.localdate()
-            check_in_datetime = datetime.combine(today, self.check_in)
-            check_out_datetime = datetime.combine(today, self.check_out)
-            
-            # If check_out is on the next day (crossing midnight), adjust
-            if check_out_datetime < check_in_datetime:
-                check_out_datetime += timedelta(days=1)
-            
-            # Calculate the minimum checkout time (15 minutes after checkin)
-            min_checkout_datetime = check_in_datetime + timedelta(minutes=15)
-            
-            # Validate the constraint
-            if check_out_datetime < min_checkout_datetime:
-                raise ValidationError("Check-out time must be at least 15 minutes after check-in time.")
+
+# ------------------- OVERTIME -------------------
+class OT(models.Model):
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
+    manager = models.ForeignKey(Manager, on_delete=models.SET_NULL, to_field='email', null=True, blank=True)
+    ot_start = models.DateTimeField()
+    ot_end = models.DateTimeField()
+    emp_name = models.CharField(max_length=255)  # From Employee.fullname
+    
+    def __str__(self):
+        return f"{self.emp_name} - OT on {self.ot_start.date()}"
+
+
+# ------------------- BREAK -------------------
+class Break(models.Model):
+    email = models.ForeignKey(User, on_delete=models.CASCADE, to_field='email')
+    break_start = models.DateTimeField()
+    break_end = models.DateTimeField()
+    emp_name = models.CharField(max_length=255)  # From Employee.fullname
+    
+    def __str__(self):
+        return f"{self.emp_name} - Break on {self.break_start.date()}"
 
     def save(self, *args, **kwargs):
         # Fill fullname and department from Employee

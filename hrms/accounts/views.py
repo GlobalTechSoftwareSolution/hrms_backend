@@ -42,7 +42,7 @@ from .models import (
     User, CEO, HR, Manager, Department, Employee, Attendance, Admin,
     Leave, Payroll, TaskTable, Project, Notice, Report,
     Document, Award, Ticket, EmployeeDetails, ReleavedEmployee, Holiday, AbsentEmployeeDetails, AppliedJobs, 
-    RaiseRequestAttendance, JobPosting, PettyCash, Shift
+    RaiseRequestAttendance, JobPosting, PettyCash, Shift, OT, Break
 )
 
 # Serializers
@@ -4105,3 +4105,421 @@ def bulk_delete_shifts(request):
             'message': f'Successfully deleted {deleted_count} shifts',
             'deleted_count': deleted_count
         }, status=status.HTTP_200_OK)
+
+
+# ------------------- OT VIEWS -------------------
+
+@api_view(['POST'])
+@csrf_exempt
+def create_ot(request):
+    """
+    Create a new overtime record
+    """
+    if request.method == 'POST':
+        email = request.data.get('email')
+        manager_email = request.data.get('manager_email')
+        ot_start = request.data.get('ot_start')
+        ot_end = request.data.get('ot_end')
+        
+        if not all([email, ot_start, ot_end]):
+            return Response({
+                'error': 'Email, ot_start, and ot_end are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get the employee
+            user = User.objects.get(email=email)
+            employee = Employee.objects.get(email=user)
+            
+            # Get manager if provided
+            manager = None
+            if manager_email:
+                manager_user = User.objects.get(email=manager_email)
+                manager = Manager.objects.get(email=manager_user)
+            
+            # Create OT record
+            ot_record = OT.objects.create(
+                email=user,
+                manager=manager,
+                ot_start=ot_start,
+                ot_end=ot_end,
+                emp_name=employee.fullname
+            )
+            
+            return Response({
+                'message': 'OT record created successfully',
+                'ot_id': ot_record.id
+            }, status=status.HTTP_201_CREATED)
+            
+        except User.DoesNotExist:
+            return Response({
+                'error': f'User with email {email} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Employee.DoesNotExist:
+            return Response({
+                'error': f'Employee with email {email} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@csrf_exempt
+def list_ot(request):
+    """
+    List all OT records with optional pagination
+    """
+    if request.method == 'GET':
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = OT.objects.count()
+            
+            # Get paginated records
+            ot_records = OT.objects.all().order_by('-ot_start')[offset:offset + page_size]
+            
+            result = []
+            for record in ot_records:
+                result.append({
+                    "id": record.id,
+                    "email": record.email.email,
+                    "manager_email": record.manager.email.email if record.manager else None,
+                    "ot_start": record.ot_start,
+                    "ot_end": record.ot_end,
+                    "emp_name": record.emp_name
+                })
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "ot_records": result,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            ot_records = OT.objects.all().order_by('-ot_start')
+            
+            result = []
+            for record in ot_records:
+                result.append({
+                    "id": record.id,
+                    "email": record.email.email,
+                    "manager_email": record.manager.email.email if record.manager else None,
+                    "ot_start": record.ot_start,
+                    "ot_end": record.ot_end,
+                    "emp_name": record.emp_name
+                })
+            
+            response_data = {
+                "ot_records": result
+            }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@csrf_exempt
+def get_ot(request, ot_id):
+    """
+    Get a specific OT record by ID
+    """
+    if request.method == 'GET':
+        try:
+            ot_record = OT.objects.get(id=ot_id)
+            response_data = {
+                "id": ot_record.id,
+                "email": ot_record.email.email,
+                "manager_email": ot_record.manager.email.email if ot_record.manager else None,
+                "ot_start": ot_record.ot_start,
+                "ot_end": ot_record.ot_end,
+                "emp_name": ot_record.emp_name
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        except OT.DoesNotExist:
+            return Response({
+                'error': f'OT record with ID {ot_id} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT'])
+@csrf_exempt
+def update_ot(request, ot_id):
+    """
+    Update a specific OT record by ID
+    """
+    if request.method == 'PUT':
+        try:
+            ot_record = OT.objects.get(id=ot_id)
+            
+            # Update fields if provided
+            if 'ot_start' in request.data:
+                ot_record.ot_start = request.data['ot_start']
+            if 'ot_end' in request.data:
+                ot_record.ot_end = request.data['ot_end']
+            if 'manager_email' in request.data:
+                if request.data['manager_email']:
+                    manager_user = User.objects.get(email=request.data['manager_email'])
+                    manager = Manager.objects.get(email=manager_user)
+                    ot_record.manager = manager
+                else:
+                    ot_record.manager = None
+            
+            ot_record.save()
+            
+            return Response({
+                'message': 'OT record updated successfully'
+            }, status=status.HTTP_200_OK)
+            
+        except OT.DoesNotExist:
+            return Response({
+                'error': f'OT record with ID {ot_id} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+@csrf_exempt
+def delete_ot(request, ot_id):
+    """
+    Delete a specific OT record by ID
+    """
+    if request.method == 'DELETE':
+        try:
+            ot_record = OT.objects.get(id=ot_id)
+            ot_record.delete()
+            return Response({
+                'message': 'OT record deleted successfully'
+            }, status=status.HTTP_200_OK)
+        except OT.DoesNotExist:
+            return Response({
+                'error': f'OT record with ID {ot_id} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ------------------- BREAK VIEWS -------------------
+
+@api_view(['POST'])
+@csrf_exempt
+def create_break(request):
+    """
+    Create a new break record
+    """
+    if request.method == 'POST':
+        email = request.data.get('email')
+        break_start = request.data.get('break_start')
+        break_end = request.data.get('break_end')
+        
+        if not all([email, break_start, break_end]):
+            return Response({
+                'error': 'Email, break_start, and break_end are required'
+            }, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            # Get the employee
+            user = User.objects.get(email=email)
+            employee = Employee.objects.get(email=user)
+            
+            # Create Break record
+            break_record = Break.objects.create(
+                email=user,
+                break_start=break_start,
+                break_end=break_end,
+                emp_name=employee.fullname
+            )
+            
+            return Response({
+                'message': 'Break record created successfully',
+                'break_id': break_record.id
+            }, status=status.HTTP_201_CREATED)
+            
+        except User.DoesNotExist:
+            return Response({
+                'error': f'User with email {email} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Employee.DoesNotExist:
+            return Response({
+                'error': f'Employee with email {email} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+@csrf_exempt
+def list_breaks(request):
+    """
+    List all break records with optional pagination
+    """
+    if request.method == 'GET':
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = Break.objects.count()
+            
+            # Get paginated records
+            break_records = Break.objects.all().order_by('-break_start')[offset:offset + page_size]
+            
+            result = []
+            for record in break_records:
+                result.append({
+                    "id": record.id,
+                    "email": record.email.email,
+                    "break_start": record.break_start,
+                    "break_end": record.break_end,
+                    "emp_name": record.emp_name
+                })
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "break_records": result,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            break_records = Break.objects.all().order_by('-break_start')
+            
+            result = []
+            for record in break_records:
+                result.append({
+                    "id": record.id,
+                    "email": record.email.email,
+                    "break_start": record.break_start,
+                    "break_end": record.break_end,
+                    "emp_name": record.emp_name
+                })
+            
+            response_data = {
+                "break_records": result
+            }
+        
+        return Response(response_data, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@csrf_exempt
+def get_break(request, break_id):
+    """
+    Get a specific break record by ID
+    """
+    if request.method == 'GET':
+        try:
+            break_record = Break.objects.get(id=break_id)
+            response_data = {
+                "id": break_record.id,
+                "email": break_record.email.email,
+                "break_start": break_record.break_start,
+                "break_end": break_record.break_end,
+                "emp_name": break_record.emp_name
+            }
+            return Response(response_data, status=status.HTTP_200_OK)
+        except Break.DoesNotExist:
+            return Response({
+                'error': f'Break record with ID {break_id} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['PUT'])
+@csrf_exempt
+def update_break(request, break_id):
+    """
+    Update a specific break record by ID
+    """
+    if request.method == 'PUT':
+        try:
+            break_record = Break.objects.get(id=break_id)
+            
+            # Update fields if provided
+            if 'break_start' in request.data:
+                break_record.break_start = request.data['break_start']
+            if 'break_end' in request.data:
+                break_record.break_end = request.data['break_end']
+            
+            break_record.save()
+            
+            return Response({
+                'message': 'Break record updated successfully'
+            }, status=status.HTTP_200_OK)
+            
+        except Break.DoesNotExist:
+            return Response({
+                'error': f'Break record with ID {break_id} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['DELETE'])
+@csrf_exempt
+def delete_break(request, break_id):
+    """
+    Delete a specific break record by ID
+    """
+    if request.method == 'DELETE':
+        try:
+            break_record = Break.objects.get(id=break_id)
+            break_record.delete()
+            return Response({
+                'message': 'Break record deleted successfully'
+            }, status=status.HTTP_200_OK)
+        except Break.DoesNotExist:
+            return Response({
+                'error': f'Break record with ID {break_id} does not exist'
+            }, status=status.HTTP_404_NOT_FOUND)
+        except Exception as e:
+            return Response({
+                'error': str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

@@ -19,7 +19,9 @@ from accounts.views import (
     transfer_to_releaved, approve_releaved, list_releaved_employees, get_releaved_employee, create_pettycash, 
     list_pettycash, get_pettycash, update_pettycash, delete_pettycash,
     contact_view, geocoding_view,
-    create_shift, list_shifts, get_shift, update_shift, delete_shift, bulk_create_shifts, bulk_delete_shifts
+    create_shift, list_shifts, get_shift, update_shift, delete_shift, bulk_create_shifts, bulk_delete_shifts,
+    create_ot, list_ot, get_ot, update_ot, delete_ot,
+    create_break, list_breaks, get_break, update_break, delete_break
 )
 
 urlpatterns = [
@@ -150,4 +152,18 @@ urlpatterns = [
     path('update_shift/<int:shift_id>/', update_shift, name='update-shift'),
     path('delete_shift/<int:shift_id>/', delete_shift, name='delete-shift'),
     path('bulk_delete_shifts/', bulk_delete_shifts, name='bulk-delete-shifts'),
+    
+    # OT URLs
+    path('create_ot/', create_ot, name='create-ot'),
+    path('list_ot/', list_ot, name='list-ot'),
+    path('get_ot/<int:ot_id>/', get_ot, name='get-ot'),
+    path('update_ot/<int:ot_id>/', update_ot, name='update-ot'),
+    path('delete_ot/<int:ot_id>/', delete_ot, name='delete-ot'),
+    
+    # Break URLs
+    path('create_break/', create_break, name='create-break'),
+    path('list_breaks/', list_breaks, name='list-breaks'),
+    path('get_break/<int:break_id>/', get_break, name='get-break'),
+    path('update_break/<int:break_id>/', update_break, name='update-break'),
+    path('delete_break/<int:break_id>/', delete_break, name='delete-break'),
 ]
