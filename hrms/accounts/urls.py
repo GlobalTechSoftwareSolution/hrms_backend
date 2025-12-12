@@ -153,14 +153,12 @@ urlpatterns = [
     path('delete_shift/<int:shift_id>/', delete_shift, name='delete-shift'),
     path('bulk_delete_shifts/', bulk_delete_shifts, name='bulk-delete-shifts'),
     
-    # OT URLs
     path('create_ot/', create_ot, name='create-ot'),
     path('list_ot/', list_ot, name='list-ot'),
     path('get_ot/<int:ot_id>/', get_ot, name='get-ot'),
     path('update_ot/<int:ot_id>/', update_ot, name='update-ot'),
     path('delete_ot/<int:ot_id>/', delete_ot, name='delete-ot'),
     
-    # Break URLs
     path('create_break/', create_break, name='create-break'),
     path('list_breaks/', list_breaks, name='list-breaks'),
     path('get_break/<int:break_id>/', get_break, name='get-break'),

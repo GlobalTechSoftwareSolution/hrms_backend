@@ -461,11 +461,59 @@ def handle_delete(request, ModelClass):
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     lookup_field = 'email'
+    pagination_class = None  # Disable automatic pagination
 
     def get_serializer_class(self):
         if self.action in ['create', 'update', 'partial_update']:
             return UserRegistrationSerializer
         return UserSerializer
+    
+    def list(self, request, *args, **kwargs):
+        """List all users - paginated if params provided, otherwise all records"""
+        # Get the queryset
+        queryset = self.get_queryset()
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "users": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            serializer = self.get_serializer(queryset, many=True)
+            
+            response_data = {
+                "users": serializer.data
+            }
+        
+        return Response(response_data)
 
 
 # ------------------- MinIO Client -------------------
@@ -659,21 +707,110 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 
     # ---------- LIST ----------
     def list(self, request, *args, **kwargs):
+        """List all users - paginated if params provided, otherwise all records"""
+        # Get the queryset
         queryset = self.get_queryset()
-        data = []
-        for instance in queryset:
-            instance_data = self.get_serializer(instance).data
-            user = getattr(instance, 'email', None)
-            if user:
-                try:
-                    details = EmployeeDetails.objects.get(email=user)
-                    for field in details._meta.fields:
-                        if field.name not in ['id', 'email']:
-                            instance_data[field.name] = getattr(details, field.name)
-                except EmployeeDetails.DoesNotExist:
-                    pass
-            data.append(instance_data)
-        return Response(data)
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            # Process paginated data
+            data = []
+            for instance in paginated_queryset:
+                instance_data = self.get_serializer(instance).data
+                user = getattr(instance, 'email', None)
+                if user:
+                    try:
+                        details = EmployeeDetails.objects.get(email=user)
+                        for field in details._meta.fields:
+                            if field.name not in ['id', 'email']:
+                                instance_data[field.name] = getattr(details, field.name)
+                    except EmployeeDetails.DoesNotExist:
+                        pass
+                data.append(instance_data)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            # Use appropriate key based on the actual ViewSet
+            if hasattr(self, 'serializer_class'):
+                if self.serializer_class == EmployeeSerializer:
+                    key_name = "employees"
+                elif self.serializer_class == HRSerializer:
+                    key_name = "hrs"
+                elif self.serializer_class == ManagerSerializer:
+                    key_name = "managers"
+                elif self.serializer_class == AdminSerializer:
+                    key_name = "admins"
+                elif self.serializer_class == CEOSerializer:
+                    key_name = "ceos"
+                else:
+                    key_name = "users"
+            else:
+                key_name = "users"
+            
+            response_data = {
+                key_name: data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            data = []
+            for instance in queryset:
+                instance_data = self.get_serializer(instance).data
+                user = getattr(instance, 'email', None)
+                if user:
+                    try:
+                        details = EmployeeDetails.objects.get(email=user)
+                        for field in details._meta.fields:
+                            if field.name not in ['id', 'email']:
+                                instance_data[field.name] = getattr(details, field.name)
+                    except EmployeeDetails.DoesNotExist:
+                        pass
+                data.append(instance_data)
+            
+            # Use appropriate key based on the actual ViewSet
+            if hasattr(self, 'serializer_class'):
+                if self.serializer_class == EmployeeSerializer:
+                    key_name = "employees"
+                elif self.serializer_class == HRSerializer:
+                    key_name = "hrs"
+                elif self.serializer_class == ManagerSerializer:
+                    key_name = "managers"
+                elif self.serializer_class == AdminSerializer:
+                    key_name = "admins"
+                elif self.serializer_class == CEOSerializer:
+                    key_name = "ceos"
+                else:
+                    key_name = "users"
+            else:
+                key_name = "users"
+            
+            response_data = {
+                key_name: data
+            }
+        
+        return Response(response_data)
 
 
 # ------------------- Role-specific ViewSets -------------------
@@ -716,6 +853,54 @@ class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
     lookup_field = 'id'
+    pagination_class = None  # Disable automatic pagination
+    
+    def list(self, request, *args, **kwargs):
+        """List all departments - paginated if params provided, otherwise all records"""
+        # Get the queryset
+        queryset = self.get_queryset()
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "departments": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            serializer = self.get_serializer(queryset, many=True)
+            
+            response_data = {
+                "departments": serializer.data
+            }
+        
+        return Response(response_data)
 
 class ReleavedEmployeeViewSet(viewsets.ModelViewSet):
     """
@@ -853,24 +1038,74 @@ def leaves_today(request):
 
 @require_GET
 def list_leaves(request):
-    """List all leaves"""
-    leaves = Leave.objects.all().order_by('-applied_on')
-
-    result = []
-    for leave in leaves:
-        result.append({
-            "id": leave.id,
-            "email": leave.email.email,
-            "start_date": str(leave.start_date),
-            "end_date": str(leave.end_date),
-            "leave_type": leave.leave_type,
-            "reason": leave.reason,
-            "status": leave.status,
-            "paid_status": leave.paid_status,
-            "applied_on": str(leave.applied_on)
-        })
-
-    return JsonResponse({"leaves": result}, status=200)
+    """List all leaves - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Leave.objects.count()
+        
+        # Get paginated records
+        leaves = Leave.objects.all().order_by('-applied_on')[offset:offset + page_size]
+        
+        result = []
+        for leave in leaves:
+            result.append({
+                "id": leave.id,
+                "email": leave.email.email,
+                "start_date": str(leave.start_date),
+                "end_date": str(leave.end_date),
+                "leave_type": leave.leave_type,
+                "reason": leave.reason,
+                "status": leave.status,
+                "paid_status": leave.paid_status,
+                "applied_on": str(leave.applied_on)
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "leaves": result,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        leaves = Leave.objects.all().order_by('-applied_on')
+        
+        result = []
+        for leave in leaves:
+            result.append({
+                "id": leave.id,
+                "email": leave.email.email,
+                "start_date": str(leave.start_date),
+                "end_date": str(leave.end_date),
+                "leave_type": leave.leave_type,
+                "reason": leave.reason,
+                "status": leave.status,
+                "paid_status": leave.paid_status,
+                "applied_on": str(leave.applied_on)
+            })
+        
+        response_data = {
+            "leaves": result
+        }
+    
+    return JsonResponse(response_data, status=200)
 
 
 def calculate_lop_days(user, month, year):
@@ -1042,47 +1277,151 @@ def get_payroll(request, email):
 
 @require_GET
 def list_payrolls(request):
-    """List all payrolls"""
-    payrolls = Payroll.objects.all().order_by('-pay_date')
-
-    result = []
-    for payroll in payrolls:
-        result.append({
-            "id": payroll.id,
-            "email": payroll.email.email,
-            "basic_salary": str(payroll.basic_salary),
-            "STD": payroll.STD,
-            "LOP": payroll.LOP,
-            "month": payroll.month,
-            "year": payroll.year,
-            "status": payroll.status,
-            "pay_date": str(payroll.pay_date),
-        })
-
-    return JsonResponse({"payrolls": result}, status=200)
+    """List all payrolls - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Payroll.objects.count()
+        
+        # Get paginated records
+        payrolls = Payroll.objects.all().order_by('-pay_date')[offset:offset + page_size]
+        
+        result = []
+        for payroll in payrolls:
+            result.append({
+                "id": payroll.id,
+                "email": payroll.email.email,
+                "basic_salary": str(payroll.basic_salary),
+                "STD": payroll.STD,
+                "LOP": payroll.LOP,
+                "month": payroll.month,
+                "year": payroll.year,
+                "status": payroll.status,
+                "pay_date": str(payroll.pay_date),
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "payrolls": result,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        payrolls = Payroll.objects.all().order_by('-pay_date')
+        
+        result = []
+        for payroll in payrolls:
+            result.append({
+                "id": payroll.id,
+                "email": payroll.email.email,
+                "basic_salary": str(payroll.basic_salary),
+                "STD": payroll.STD,
+                "LOP": payroll.LOP,
+                "month": payroll.month,
+                "year": payroll.year,
+                "status": payroll.status,
+                "pay_date": str(payroll.pay_date),
+            })
+        
+        response_data = {
+            "payrolls": result
+        }
+    
+    return JsonResponse(response_data, status=200)
 
 @require_GET
 def list_tasks(request):
-    tasks = TaskTable.objects.all().order_by('-created_at')
-    result = []
-
-    for task in tasks:
-        result.append({
-            "task_id": task.task_id,
-            "title": task.title,
-            "description": task.description,
-            "email": task.email.email,
-            "assigned_by": task.assigned_by.email if task.assigned_by else None,
-            "priority": task.priority,
-            "status": task.status,
-            "start_date": str(task.start_date),
-            "due_date": str(task.due_date) if task.due_date else None,
-            "completed_date": str(task.completed_date) if task.completed_date else None,
-            "created_at": str(task.created_at),
-            "updated_at": str(task.updated_at),
-        })
-
-    return JsonResponse({"tasks": result}, status=200)
+    """List all tasks - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = TaskTable.objects.count()
+        
+        # Get paginated records
+        tasks = TaskTable.objects.all().order_by('-created_at')[offset:offset + page_size]
+        
+        result = []
+        for task in tasks:
+            result.append({
+                "task_id": task.task_id,
+                "title": task.title,
+                "description": task.description,
+                "email": task.email.email,
+                "assigned_by": task.assigned_by.email if task.assigned_by else None,
+                "priority": task.priority,
+                "status": task.status,
+                "start_date": str(task.start_date),
+                "due_date": str(task.due_date) if task.due_date else None,
+                "completed_date": str(task.completed_date) if task.completed_date else None,
+                "created_at": str(task.created_at),
+                "updated_at": str(task.updated_at),
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "tasks": result,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        tasks = TaskTable.objects.all().order_by('-created_at')
+        
+        result = []
+        for task in tasks:
+            result.append({
+                "task_id": task.task_id,
+                "title": task.title,
+                "description": task.description,
+                "email": task.email.email,
+                "assigned_by": task.assigned_by.email if task.assigned_by else None,
+                "priority": task.priority,
+                "status": task.status,
+                "start_date": str(task.start_date),
+                "due_date": str(task.due_date) if task.due_date else None,
+                "completed_date": str(task.completed_date) if task.completed_date else None,
+                "created_at": str(task.created_at),
+                "updated_at": str(task.updated_at),
+            })
+        
+        response_data = {
+            "tasks": result
+        }
+    
+    return JsonResponse(response_data, status=200)
 
 
 @require_GET
@@ -1343,20 +1682,72 @@ def create_report(request):
 
 @require_http_methods(["GET"])
 def list_reports(request):
-    reports = Report.objects.all().order_by('-date', '-created_at')
-    result = []
-    for r in reports:
-        result.append({
-            "id": r.id,
-            "title": r.title,
-            "description": r.description,
-            "date": str(r.date),
-            "content": r.content,
-            "email": r.email.email if r.email else None,
-            "created_at": r.created_at.isoformat(),
-            "updated_at": r.updated_at.isoformat()
-        })
-    return JsonResponse({"reports": result})
+    """List all reports - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Report.objects.count()
+        
+        # Get paginated records
+        reports = Report.objects.all().order_by('-date', '-created_at')[offset:offset + page_size]
+        
+        result = []
+        for r in reports:
+            result.append({
+                "id": r.id,
+                "title": r.title,
+                "description": r.description,
+                "date": str(r.date),
+                "content": r.content,
+                "email": r.email.email if r.email else None,
+                "created_at": r.created_at.isoformat(),
+                "updated_at": r.updated_at.isoformat()
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "reports": result,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        reports = Report.objects.all().order_by('-date', '-created_at')
+        
+        result = []
+        for r in reports:
+            result.append({
+                "id": r.id,
+                "title": r.title,
+                "description": r.description,
+                "date": str(r.date),
+                "content": r.content,
+                "email": r.email.email if r.email else None,
+                "created_at": r.created_at.isoformat(),
+                "updated_at": r.updated_at.isoformat()
+            })
+        
+        response_data = {
+            "reports": result
+        }
+    
+    return JsonResponse(response_data)
 
 
 @csrf_exempt
@@ -1404,9 +1795,50 @@ def delete_report(request, pk):
 
 @api_view(['GET'])
 def list_projects(request):
-    projects = Project.objects.all().order_by('-created_at')
-    serializer = ProjectSerializer(projects, many=True)
-    return Response({"projects": serializer.data}, status=status.HTTP_200_OK)
+    """List all projects - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Project.objects.count()
+        
+        # Get paginated records
+        projects = Project.objects.all().order_by('-created_at')[offset:offset + page_size]
+        
+        serializer = ProjectSerializer(projects, many=True)
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "projects": serializer.data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        projects = Project.objects.all().order_by('-created_at')
+        
+        serializer = ProjectSerializer(projects, many=True)
+        
+        response_data = {
+            "projects": serializer.data
+        }
+    
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @csrf_exempt
@@ -1506,22 +1938,76 @@ def delete_project(request, pk):
 
 @require_http_methods(["GET"])
 def list_notices(request):
-    notices = Notice.objects.all().order_by('-posted_date')
-    result = []
-    for notice in notices:
-        result.append({
-            "id": notice.id,
-            "title": notice.title,
-            "message": notice.message,
-            "email": notice.email.email if notice.email else None,
-            "notice_by": notice.notice_by.email if notice.notice_by else None,
-            "notice_to": notice.notice_to.email if notice.notice_to else None,
-            "posted_date": notice.posted_date.isoformat(),
-            "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
-            "important": notice.important,
-            "attachment": notice.attachment.url if notice.attachment else None,
-        })
-    return JsonResponse({"notices": result})
+    """List all notices - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Notice.objects.count()
+        
+        # Get paginated records
+        notices = Notice.objects.all().order_by('-posted_date')[offset:offset + page_size]
+        
+        result = []
+        for notice in notices:
+            result.append({
+                "id": notice.id,
+                "title": notice.title,
+                "message": notice.message,
+                "email": notice.email.email if notice.email else None,
+                "notice_by": notice.notice_by.email if notice.notice_by else None,
+                "notice_to": notice.notice_to.email if notice.notice_to else None,
+                "posted_date": notice.posted_date.isoformat(),
+                "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
+                "important": notice.important,
+                "attachment": notice.attachment.url if notice.attachment else None,
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "notices": result,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        notices = Notice.objects.all().order_by('-posted_date')
+        
+        result = []
+        for notice in notices:
+            result.append({
+                "id": notice.id,
+                "title": notice.title,
+                "message": notice.message,
+                "email": notice.email.email if notice.email else None,
+                "notice_by": notice.notice_by.email if notice.notice_by else None,
+                "notice_to": notice.notice_to.email if notice.notice_to else None,
+                "posted_date": notice.posted_date.isoformat(),
+                "valid_until": notice.valid_until.isoformat() if notice.valid_until else None,
+                "important": notice.important,
+                "attachment": notice.attachment.url if notice.attachment else None,
+            })
+        
+        response_data = {
+            "notices": result
+        }
+    
+    return JsonResponse(response_data)
 
 
 @csrf_exempt
@@ -1755,8 +2241,8 @@ def update_document(request, email):
 def geocoding_view(request):
     if request.method == 'GET':
         # Get latitude and longitude from query parameters
-        lat = request.GET.get('lat')
-        lon = request.GET.get('lon')
+        lat = request.GET.get('latitude')
+        lon = request.GET.get('longitude')
         
         # Validate required parameters
         if not lat or not lon:
@@ -1835,17 +2321,62 @@ def delete_document(request, email):
 # LIST All Documents
 @csrf_exempt
 def list_documents(request):
-    documents = Document.objects.all()
-    data = []
-
-    for doc in documents:
-        # Fixed: Document model doesn't have an id field, use email as identifier
-        doc_data = {"email": doc.email.email}
-        for field in DOCUMENT_FIELDS:
-            doc_data[field] = getattr(doc, field) if getattr(doc, field) else None
-        data.append(doc_data)
-
-    return JsonResponse(data, safe=False)
+    """List all documents - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Document.objects.count()
+        
+        # Get paginated records
+        documents = Document.objects.all()[offset:offset + page_size]
+        
+        data = []
+        for doc in documents:
+            # Fixed: Document model doesn't have an id field, use email as identifier
+            doc_data = {"email": doc.email.email}
+            for field in DOCUMENT_FIELDS:
+                doc_data[field] = getattr(doc, field) if getattr(doc, field) else None
+            data.append(doc_data)
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "documents": data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        documents = Document.objects.all()
+        
+        data = []
+        for doc in documents:
+            # Fixed: Document model doesn't have an id field, use email as identifier
+            doc_data = {"email": doc.email.email}
+            for field in DOCUMENT_FIELDS:
+                doc_data[field] = getattr(doc, field) if getattr(doc, field) else None
+            data.append(doc_data)
+        
+        response_data = {
+            "documents": data
+        }
+    
+    return JsonResponse(response_data)
 
 
 # GET Document for a user
@@ -1950,19 +2481,70 @@ def update_award(request, pk):
 
 
 def list_awards(request):
-    awards = Award.objects.all()
-    data = []
-    for a in awards:
-        # Fixed: Use pk instead of id for award
-        data.append({
-            "pk": a.pk,
-            "email": a.email.email,
-            "title": a.title,
-            "description": a.description,
-            "photo": a.photo if a.photo else None,
-            "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Format datetime as string
-        })
-    return JsonResponse(data, safe=False)
+    """List all awards - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = Award.objects.count()
+        
+        # Get paginated records
+        awards = Award.objects.all()[offset:offset + page_size]
+        
+        data = []
+        for a in awards:
+            # Fixed: Use pk instead of id for award
+            data.append({
+                "pk": a.pk,
+                "email": a.email.email,
+                "title": a.title,
+                "description": a.description,
+                "photo": a.photo if a.photo else None,
+                "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Format datetime as string
+            })
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "awards": data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        awards = Award.objects.all()
+        
+        data = []
+        for a in awards:
+            # Fixed: Use pk instead of id for award
+            data.append({
+                "pk": a.pk,
+                "email": a.email.email,
+                "title": a.title,
+                "description": a.description,
+                "photo": a.photo if a.photo else None,
+                "created_at": a.created_at.strftime("%Y-%m-%d %H:%M:%S"),  # Format datetime as string
+            })
+        
+        response_data = {
+            "awards": data
+        }
+    
+    return JsonResponse(response_data, safe=False)
 
 
 def get_award(request, pk):
@@ -2009,10 +2591,58 @@ class TicketViewSet(viewsets.ModelViewSet):
     queryset = Ticket.objects.all()
     serializer_class = TicketSerializer
     permission_classes = [AllowAny]  # allow all requests
+    pagination_class = None  # Disable automatic pagination
 
     # Optional: filter tickets by assigned_to if needed
     def get_queryset(self):
         return Ticket.objects.all()
+    
+    def list(self, request, *args, **kwargs):
+        """List all tickets - paginated if params provided, otherwise all records"""
+        # Get the queryset
+        queryset = self.get_queryset()
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "tickets": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            serializer = self.get_serializer(queryset, many=True)
+            
+            response_data = {
+                "tickets": serializer.data
+            }
+        
+        return Response(response_data)
 
 
 IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
@@ -3037,6 +3667,54 @@ def bonafide_certificate(request):
 class HolidayViewSet(viewsets.ModelViewSet):
     queryset = Holiday.objects.all()
     serializer_class = HolidaySerializer
+    pagination_class = None  # Disable automatic pagination
+    
+    def list(self, request, *args, **kwargs):
+        """List all holidays - paginated if params provided, otherwise all records"""
+        # Get the queryset
+        queryset = self.get_queryset()
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "holidays": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            serializer = self.get_serializer(queryset, many=True)
+            
+            response_data = {
+                "holidays": serializer.data
+            }
+        
+        return Response(response_data)
 
     def create(self, request, *args, **kwargs):
         data = request.data
@@ -3090,9 +3768,49 @@ class HolidayViewSet(viewsets.ModelViewSet):
 
 @api_view(['GET'])
 def list_absent_employees(request):
-    absent_employees = AbsentEmployeeDetails.objects.all()
-    serializer = AbsentEmployeeDetailsSerializer(absent_employees, many=True)
-    return Response(serializer.data)
+    """List absent employee records - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = AbsentEmployeeDetails.objects.count()
+        
+        # Get paginated records
+        absent_employees = AbsentEmployeeDetails.objects.all()[offset:offset + page_size]
+        
+        serializer = AbsentEmployeeDetailsSerializer(absent_employees, many=True)
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "absent_employees": serializer.data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        absent_employees = AbsentEmployeeDetails.objects.all()
+        serializer = AbsentEmployeeDetailsSerializer(absent_employees, many=True)
+        
+        response_data = {
+            "absent_employees": serializer.data
+        }
+    
+    return Response(response_data)
 
 
 @api_view(['GET'])
@@ -3231,6 +3949,54 @@ class CareerViewSet(viewsets.ModelViewSet):
     queryset = JobPosting.objects.all()
     serializer_class = CareerSerializer
     lookup_field = 'id'  # JobPosting uses 'id' as primary key, not 'email'
+    pagination_class = None  # Disable automatic pagination
+    
+    def list(self, request, *args, **kwargs):
+        """List all job postings - paginated if params provided, otherwise all records"""
+        # Get the queryset
+        queryset = self.get_queryset()
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "job_postings": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            serializer = self.get_serializer(queryset, many=True)
+            
+            response_data = {
+                "job_postings": serializer.data
+            }
+        
+        return Response(response_data)
     
 
 def upload_resume(instance, file_obj):
@@ -3260,6 +4026,54 @@ class AppliedJobViewSet(viewsets.ModelViewSet):
     serializer_class = AppliedJobSerializer
     lookup_field = 'email'
     permission_classes = [AllowAny]  # Allow all (adjust if you add auth later)
+    pagination_class = None  # Disable automatic pagination
+    
+    def list(self, request, *args, **kwargs):
+        """List all applied jobs - paginated if params provided, otherwise all records"""
+        # Get the queryset
+        queryset = self.get_queryset()
+        
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = queryset.count()
+            
+            # Get paginated records
+            paginated_queryset = queryset[offset:offset + page_size]
+            
+            serializer = self.get_serializer(paginated_queryset, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "applied_jobs": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            serializer = self.get_serializer(queryset, many=True)
+            
+            response_data = {
+                "applied_jobs": serializer.data
+            }
+        
+        return Response(response_data)
 
     def create(self, request, *args, **kwargs):
         """Create a new job application"""
@@ -3785,6 +4599,8 @@ def list_releaved_employees(request):
     - hr_approved: Filter by HR approval status ('Pending', 'Approved', 'Rejected')
     - department: Filter by department
     - designation: Filter by designation
+    - page: Page number for pagination
+    - page_size: Number of items per page (default: 20, max: 100)
     """
     releaved_employees = ReleavedEmployee.objects.all().order_by('-applied_at')
     
@@ -3806,8 +4622,47 @@ def list_releaved_employees(request):
     if designation_filter:
         releaved_employees = releaved_employees.filter(designation__icontains=designation_filter)
     
-    serializer = ReleavedEmployeeSerializer(releaved_employees, many=True)
-    return Response(serializer.data, status=status.HTTP_200_OK)
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = releaved_employees.count()
+        
+        # Get paginated records
+        paginated_employees = releaved_employees[offset:offset + page_size]
+        
+        serializer = ReleavedEmployeeSerializer(paginated_employees, many=True)
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "releaved_employees": serializer.data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        serializer = ReleavedEmployeeSerializer(releaved_employees, many=True)
+        
+        response_data = {
+            "releaved_employees": serializer.data
+        }
+    
+    return Response(response_data, status=status.HTTP_200_OK)
 
 
 @api_view(['GET'])
@@ -3836,10 +4691,49 @@ from .serializers import PettyCashSerializer
 
 @api_view(['GET'])
 def list_pettycash(request):
-    """List all petty cash records"""
-    records = PettyCash.objects.all().order_by('-created_at')
-    serializer = PettyCashSerializer(records, many=True)
-    return Response(serializer.data)
+    """List all petty cash records - paginated if params provided, otherwise all records"""
+    # Check if pagination parameters are provided
+    page_param = request.GET.get('page')
+    page_size_param = request.GET.get('page_size')
+    
+    if page_param is not None or page_size_param is not None:
+        # Use pagination if either parameter is provided
+        page = int(page_param) if page_param else 1
+        page_size = min(int(page_size_param) if page_size_param else 20, 100)
+        
+        # Calculate offset
+        offset = (page - 1) * page_size
+        
+        # Get total count
+        total_count = PettyCash.objects.count()
+        
+        # Get paginated records
+        records = PettyCash.objects.all().order_by('-created_at')[offset:offset + page_size]
+        
+        serializer = PettyCashSerializer(records, many=True)
+        
+        # Calculate pagination info
+        total_pages = (total_count + page_size - 1) // page_size
+        
+        response_data = {
+            "pettycash_records": serializer.data,
+            "pagination": {
+                "current_page": page,
+                "page_size": page_size,
+                "total_pages": total_pages,
+                "total_count": total_count
+            }
+        }
+    else:
+        # Fetch all records if no pagination parameters
+        records = PettyCash.objects.all().order_by('-created_at')
+        serializer = PettyCashSerializer(records, many=True)
+        
+        response_data = {
+            "pettycash_records": serializer.data
+        }
+    
+    return Response(response_data)
 
 
 @api_view(['POST'])
@@ -4032,12 +4926,51 @@ def bulk_create_shifts(request):
 @api_view(['GET'])
 def list_shifts(request):
     """
-    List all shifts
+    List all shifts - paginated if params provided, otherwise all records
     """
     if request.method == 'GET':
-        shifts = Shift.objects.all()
-        serializer = ShiftSerializer(shifts, many=True)
-        return Response(serializer.data)
+        # Check if pagination parameters are provided
+        page_param = request.GET.get('page')
+        page_size_param = request.GET.get('page_size')
+        
+        if page_param is not None or page_size_param is not None:
+            # Use pagination if either parameter is provided
+            page = int(page_param) if page_param else 1
+            page_size = min(int(page_size_param) if page_size_param else 20, 100)
+            
+            # Calculate offset
+            offset = (page - 1) * page_size
+            
+            # Get total count
+            total_count = Shift.objects.count()
+            
+            # Get paginated records
+            shifts = Shift.objects.all()[offset:offset + page_size]
+            
+            serializer = ShiftSerializer(shifts, many=True)
+            
+            # Calculate pagination info
+            total_pages = (total_count + page_size - 1) // page_size
+            
+            response_data = {
+                "shifts": serializer.data,
+                "pagination": {
+                    "current_page": page,
+                    "page_size": page_size,
+                    "total_pages": total_pages,
+                    "total_count": total_count
+                }
+            }
+        else:
+            # Fetch all records if no pagination parameters
+            shifts = Shift.objects.all()
+            serializer = ShiftSerializer(shifts, many=True)
+            
+            response_data = {
+                "shifts": serializer.data
+            }
+        
+        return Response(response_data)
 
 
 @api_view(['GET'])
