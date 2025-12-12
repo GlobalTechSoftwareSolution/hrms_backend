@@ -43,3 +43,6 @@ Desktop.ini
 
 # PyCharm
 *.iml
+
+# Images
+images/

@@ -550,7 +550,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
         key = f'images/{email_str}/profile_picture.{ext}'
 
         # Delete old picture
-        if hasattr(instance, "profile_picture") and instance.profile_picture and instance.profile_picture != f"{BASE_BUCKET_URL}{key}":
+        if hasattr(instance, "profile_picture") and instance.profile_picture and instance.profile_picture != f"{settings.BASE_BUCKET_URL}{key}":
             old_key = instance.profile_picture.replace(BASE_BUCKET_URL, "")
             try:
                 client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
@@ -559,7 +559,7 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 
         # Upload new picture
         client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": file_obj.content_type})
-        instance.profile_picture = f"{BASE_BUCKET_URL}{key}"
+        instance.profile_picture = f"{settings.BASE_BUCKET_URL}{key}"
         instance.save()
 
 
@@ -2153,32 +2153,54 @@ def create_document(request):
     if not email:
         return JsonResponse({"error": "Email is required"}, status=400)
 
-    user = get_object_or_404(User, email=email)
-    folder_name = email.split("@")[0].lower()
-    client = get_s3_client()
-    bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
-    uploaded_files = {}
+    try:
+        user = get_object_or_404(User, email=email)
+        folder_name = email.split("@")[0].lower()
+        client = get_s3_client()
+        bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+        
+        # Ensure bucket exists
+        try:
+            client.head_bucket(Bucket=bucket_name)
+        except Exception:
+            try:
+                client.create_bucket(Bucket=bucket_name)
+            except Exception as e:
+                print(f"Failed to create bucket: {e}")
+                pass
+        
+        uploaded_files = {}
 
-    for field in DOCUMENT_FIELDS:
-        file_obj = request.FILES.get(field)
-        if file_obj:
-            ext = file_obj.name.split(".")[-1]
-            key = f"documents/{folder_name}/{field}.{ext}"
-            client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs={"ACL": "public-read"})
-            uploaded_files[field] = f"{BASE_BUCKET_URL}{key}"
+        for field in DOCUMENT_FIELDS:
+            file_obj = request.FILES.get(field)
+            if file_obj:
+                ext = file_obj.name.split(".")[-1]
+                key = f"documents/{folder_name}/{field}.{ext}"
+                # Upload without ACL parameter to avoid MinIO compatibility issues
+                client.upload_fileobj(file_obj, bucket_name, key)
+                uploaded_files[field] = f"{settings.BASE_BUCKET_URL}{key}"
+        document, created = Document.objects.get_or_create(
+            email=user,
+            defaults={field: uploaded_files.get(field) for field in DOCUMENT_FIELDS}
+        )
+        
+        # If document already exists, update the fields
+        if not created:
+            for field, url in uploaded_files.items():
+                setattr(document, field, url)
+            document.save()
 
-    document = Document.objects.create(
-        email=user,
-        **{field: uploaded_files.get(field) for field in DOCUMENT_FIELDS}
-    )
-
-    # Fixed: Document model doesn't have an id field, using email as identifier
-    return JsonResponse({
-        "message": "Document created successfully",
-        "email": document.email.email,
-        "urls": uploaded_files
-    })
-
+        # Fixed: Document model doesn't have an id field, using email as identifier
+        return JsonResponse({
+            "message": "Document created successfully",
+            "email": document.email.email,
+            "urls": uploaded_files
+        })
+    except Exception as e:
+        print(f"Error creating document: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return JsonResponse({"error": f"Internal server error: {str(e)}"}, status=500)
 # UPDATE Document
 @csrf_exempt
 def update_document(request, email):
@@ -2213,8 +2235,8 @@ def update_document(request, email):
 
         # Optionally delete old file if the extension changed
         old_file_url = getattr(doc, field)
-        if old_file_url and old_file_url != f"{BASE_BUCKET_URL}{key}":
-            old_key = old_file_url.replace(BASE_BUCKET_URL, "")
+        if old_file_url and old_file_url != f"{settings.BASE_BUCKET_URL}{key}":
+            old_key = old_file_url.replace(settings.BASE_BUCKET_URL, "")
             try:
                 client.delete_object(Bucket=bucket_name, Key=old_key)
                 print(f"Deleted old file: {old_key}")
@@ -2223,13 +2245,12 @@ def update_document(request, email):
 
         # Upload new file (will replace if key exists)
         try:
-            client.upload_fileobj(file_obj, bucket_name, key, ExtraArgs={"ACL": "public-read"})
-            new_url = f"{BASE_BUCKET_URL}{key}"
+            client.upload_fileobj(file_obj, bucket_name, key)
+            new_url = f"{settings.BASE_BUCKET_URL}{key}"
             setattr(doc, field, new_url)
             updated_files[field] = new_url
         except Exception as e:
             return JsonResponse({"error": f"Upload failed for {field}: {str(e)}"}, status=500)
-
     if updated_files:
         doc.save()
         return JsonResponse({"message": "Document(s) updated successfully", "updated_files": updated_files})
@@ -2426,8 +2447,11 @@ def create_award(request):
             # Fixed: Use pk instead of id for award
             key = f'awards/{award.pk}.{extension}'
             try:
-                client.upload_fileobj(photo_file, BUCKET_NAME, key, ExtraArgs={"ContentType": photo_file.content_type})
-                award.photo = f"{BASE_BUCKET_URL}{key}"
+                # Get bucket name from settings
+                bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+                client.upload_fileobj(photo_file, bucket_name, key, ExtraArgs={"ContentType": photo_file.content_type})
+                # Use BASE_BUCKET_URL from settings
+                award.photo = f"{settings.BASE_BUCKET_URL}{key}"
                 award.save()
             except Exception as e:
                 return JsonResponse({"error": f"File upload failed: {str(e)}"}, status=500)
@@ -2436,7 +2460,6 @@ def create_award(request):
         return JsonResponse({"message": "Award created", "pk": award.pk})
     else:
         return JsonResponse({"error": "POST method required"}, status=405)
-
 
 @csrf_exempt
 @require_http_methods(["POST", "PATCH"])
@@ -2465,21 +2488,23 @@ def update_award(request, pk):
         key = f'awards/{award.pk}.{extension}'
 
         # Delete old photo if exists
-        if award.photo and award.photo.startswith(BASE_BUCKET_URL):
-            old_key = award.photo.replace(BASE_BUCKET_URL, "")
+        if award.photo and award.photo.startswith(settings.BASE_BUCKET_URL):
+            old_key = award.photo.replace(settings.BASE_BUCKET_URL, "")
             try:
-                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                # Get bucket name from settings
+                bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+                client.delete_object(Bucket=bucket_name, Key=old_key)
             except Exception as e:
                 print(f"Failed to delete old photo: {e}")
 
         # Upload new photo
-        client.upload_fileobj(photo_file, BUCKET_NAME, key, ExtraArgs={"ContentType": photo_file.content_type})
-        award.photo = f"{BASE_BUCKET_URL}{key}"
+        # Get bucket name from settings
+        bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+        client.upload_fileobj(photo_file, bucket_name, key, ExtraArgs={"ContentType": photo_file.content_type})
+        award.photo = f"{settings.BASE_BUCKET_URL}{key}"
 
     award.save()
     return JsonResponse({"message": "Award updated"})
-
-
 def list_awards(request):
     """List all awards - paginated if params provided, otherwise all records"""
     # Check if pagination parameters are provided
@@ -2568,10 +2593,12 @@ def delete_award(request, pk):
         client = get_s3_client()
 
         # Delete photo from MinIO if it exists
-        if award.photo and award.photo.startswith(BASE_BUCKET_URL):
-            old_key = award.photo.replace(BASE_BUCKET_URL, "")
+        if award.photo and award.photo.startswith(settings.BASE_BUCKET_URL):
+            old_key = award.photo.replace(settings.BASE_BUCKET_URL, "")
             try:
-                client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
+                # Get bucket name from settings
+                bucket_name = settings.MINIO_STORAGE["BUCKET_NAME"]
+                client.delete_object(Bucket=bucket_name, Key=old_key)
                 print(f"Deleted photo from MinIO: {old_key}")
             except Exception as e:
                 print(f"Failed to delete photo from MinIO: {e}")
@@ -2580,7 +2607,6 @@ def delete_award(request, pk):
         return JsonResponse({"message": "Award and photo deleted successfully"})
     else:
         return JsonResponse({"error": "DELETE method required"}, status=405)
-
 
 # Attendance HTML page
 def attendance_page(request):
@@ -3305,13 +3331,13 @@ def appointment_letter(request):
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
+        # Use the BASE_BUCKET_URL for public access
+        file_url = f"{settings.BASE_BUCKET_URL}{object_name}"
 
         # Save the MinIO file URL to Document model
         document, _ = Document.objects.get_or_create(email=user)
         document.appointment_letter = file_url
         document.save()
-
     except Exception as e:
         return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -3415,13 +3441,13 @@ def offer_letter(request):
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
+        # Use the BASE_BUCKET_URL for public access
+        file_url = f"{settings.BASE_BUCKET_URL}{object_name}"
 
         # Save the MinIO file URL to Document model
         document, _ = Document.objects.get_or_create(email=user)
         document.offer_letter = file_url
         document.save()
-
     except Exception as e:
         return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
@@ -3447,8 +3473,6 @@ def offer_letter(request):
         "employee": employee.fullname,
         "file_url": file_url
     }, status=status.HTTP_200_OK)
-
-
 @api_view(['POST'])
 def releaving_letter(request):
     email = request.data.get('email')
@@ -3470,17 +3494,18 @@ def releaving_letter(request):
     # -------------------- Render PDF -------------------- #
     context = {
         'employee_name': employee.fullname,
+        'candidate_name': employee.fullname,
         'employee_id': getattr(employee, 'emp_id', '') or getattr(employee, 'id', ''),
         'designation': employee.designation or 'Employee',
         'department': employee.department or '',
-        'date_of_joining': employee.date_joined or today,
-        'last_working_day': last_working_day,
-        'resignation_effective_date': last_working_day,
-        'issue_date': today,
+        'date_of_joining': employee.date_joined.strftime("%d-%m-%Y") if employee.date_joined else today.strftime("%d-%m-%Y"),
+        'last_working_day': last_working_day.strftime("%d-%m-%Y") if hasattr(last_working_day, 'strftime') else str(last_working_day),
+        'resignation_effective_date': last_working_day.strftime("%d-%m-%Y") if hasattr(last_working_day, 'strftime') else str(last_working_day),
+        'today_date': today.strftime("%d-%m-%Y"),
+        'issue_date': today.strftime("%d-%m-%Y"),
         'company_name': 'Global Tech Software Solutions',
         'logo_url': 'https://www.globaltechsoftwaresolutions.com/_next/image?url=%2Flogo%2FGlobal.jpg&w=64&q=75',
     }
-
     html = render_to_string('letters/releaving_letter.html', context)
 
     # -------------------- Generate PDFs -------------------- #
@@ -3519,16 +3544,15 @@ def releaving_letter(request):
         bucket_name = minio_conf['BUCKET_NAME']
         s3.upload_fileobj(pdf_minio, bucket_name, object_name, ExtraArgs={'ContentType': 'application/pdf'})
 
-        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
+        # Use the BASE_BUCKET_URL for public access
+        file_url = f"{settings.BASE_BUCKET_URL}{object_name}"
 
         # Save URL to Document
         document, _ = Document.objects.get_or_create(email=user)
         document.releaving_letter = file_url
         document.save()
-
     except Exception as e:
         return Response({"error": f"MinIO upload or DB save failed: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     # -------------------- Send Email -------------------- #
     try:
         pdf_email.seek(0)
@@ -3630,8 +3654,8 @@ def bonafide_certificate(request):
             ExtraArgs={'ContentType': 'application/pdf'}
         )
 
-        file_url = f"{protocol}://{minio_conf['ENDPOINT']}/{bucket_name}/{object_name}"
-
+        # Use the BASE_BUCKET_URL for public access
+        file_url = f"{settings.BASE_BUCKET_URL}{object_name}"
         # Save URL to DB
         document, _ = Document.objects.get_or_create(email=user)
         document.bonafide_crt = file_url
@@ -4005,7 +4029,7 @@ def upload_resume(instance, file_obj):
     key = f'careers_resume/{instance.email}.{ext}'
 
     # Delete old resume if exists
-    if instance.resume and instance.resume != f"{BASE_BUCKET_URL}{key}":
+    if instance.resume and instance.resume != f"{settings.BASE_BUCKET_URL}{key}":
         old_key = instance.resume.replace(BASE_BUCKET_URL, "")
         try:
             client.delete_object(Bucket=BUCKET_NAME, Key=old_key)
@@ -4015,7 +4039,7 @@ def upload_resume(instance, file_obj):
     # ✅ Allow both PDF and images
     content_type = file_obj.content_type or "application/octet-stream"
     client.upload_fileobj(file_obj, BUCKET_NAME, key, ExtraArgs={"ContentType": content_type})
-    instance.resume = f"{BASE_BUCKET_URL}{key}"
+    instance.resume = f"{settings.BASE_BUCKET_URL}{key}"
     instance.save()
 
 
