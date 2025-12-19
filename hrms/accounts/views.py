@@ -827,16 +827,118 @@ class HRViewSet(BaseUserViewSet):
 class ManagerViewSet(BaseUserViewSet):
     queryset = Manager.objects.all()
     serializer_class = ManagerSerializer
+    
+    def destroy(self, request, email=None):
+        try:
+            # 1️⃣ Fetch Manager
+            manager = get_object_or_404(Manager, email=email)
+
+            # 2️⃣ Extract plain email string
+            if hasattr(manager.email, "email"):  # ForeignKey(User)
+                email_str = manager.email.email
+            else:
+                email_str = manager.email
+
+            # 3️⃣ Delete profile picture from MinIO
+            if hasattr(manager, "profile_picture") and manager.profile_picture:
+                client = get_s3_client()
+                key = manager.profile_picture.replace(BASE_BUCKET_URL, "")
+                try:
+                    client.delete_object(Bucket=BUCKET_NAME, Key=key)
+                except Exception as e:
+                    print(f"[WARN] Failed to delete profile picture from MinIO: {e}")
+
+            # 4️⃣ Delete main Manager and related User safely
+            manager.delete()
+            user = User.objects.filter(email=email_str).first()
+            if user:
+                user.delete()
+
+            return Response(
+                {"message": f"{email_str} successfully offboarded."},
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class AdminViewSet(BaseUserViewSet):
     queryset = Admin.objects.all()
     serializer_class = AdminSerializer
+    
+    def destroy(self, request, email=None):
+        try:
+            # 1️⃣ Fetch Admin
+            admin = get_object_or_404(Admin, email=email)
+
+            # 2️⃣ Extract plain email string
+            if hasattr(admin.email, "email"):  # ForeignKey(User)
+                email_str = admin.email.email
+            else:
+                email_str = admin.email
+
+            # 3️⃣ Delete profile picture from MinIO
+            if hasattr(admin, "profile_picture") and admin.profile_picture:
+                client = get_s3_client()
+                key = admin.profile_picture.replace(BASE_BUCKET_URL, "")
+                try:
+                    client.delete_object(Bucket=BUCKET_NAME, Key=key)
+                except Exception as e:
+                    print(f"[WARN] Failed to delete profile picture from MinIO: {e}")
+
+            # 4️⃣ Delete main Admin and related User safely
+            admin.delete()
+            user = User.objects.filter(email=email_str).first()
+            if user:
+                user.delete()
+
+            return Response(
+                {"message": f"{email_str} successfully offboarded."},
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class CEOViewSet(BaseUserViewSet):
     queryset = CEO.objects.all()
     serializer_class = CEOSerializer
+    
+    def destroy(self, request, email=None):
+        try:
+            # 1️⃣ Fetch CEO
+            ceo = get_object_or_404(CEO, email=email)
+
+            # 2️⃣ Extract plain email string
+            if hasattr(ceo.email, "email"):  # ForeignKey(User)
+                email_str = ceo.email.email
+            else:
+                email_str = ceo.email
+
+            # 3️⃣ Delete profile picture from MinIO
+            if hasattr(ceo, "profile_picture") and ceo.profile_picture:
+                client = get_s3_client()
+                key = ceo.profile_picture.replace(BASE_BUCKET_URL, "")
+                try:
+                    client.delete_object(Bucket=BUCKET_NAME, Key=key)
+                except Exception as e:
+                    print(f"[WARN] Failed to delete profile picture from MinIO: {e}")
+
+            # 4️⃣ Delete main CEO and related User safely
+            ceo.delete()
+            user = User.objects.filter(email=email_str).first()
+            if user:
+                user.delete()
+
+            return Response(
+                {"message": f"{email_str} successfully offboarded."},
+                status=status.HTTP_200_OK
+            )
+
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class DocumentViewSet(viewsets.ModelViewSet):
@@ -852,7 +954,7 @@ class AwardViewSet(viewsets.ModelViewSet):
 class DepartmentViewSet(viewsets.ModelViewSet):
     queryset = Department.objects.all()
     serializer_class = DepartmentSerializer
-    lookup_field = 'id'
+    lookup_field = 'pk'
     pagination_class = None  # Disable automatic pagination
     
     def list(self, request, *args, **kwargs):
@@ -901,6 +1003,42 @@ class DepartmentViewSet(viewsets.ModelViewSet):
             }
         
         return Response(response_data)
+    
+    def retrieve(self, request, *args, **kwargs):
+        """Retrieve a specific department by ID"""
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance)
+            return Response({"department": serializer.data})
+        except Department.DoesNotExist:
+            return Response({"error": "Department not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+    
+    def update(self, request, *args, **kwargs):
+        """Update a specific department by ID"""
+        try:
+            instance = self.get_object()
+            serializer = self.get_serializer(instance, data=request.data, partial=True)
+            if serializer.is_valid():
+                serializer.save()
+                return Response({"department": serializer.data})
+            return Response(serializer.errors, status=400)
+        except Department.DoesNotExist:
+            return Response({"error": "Department not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
+    
+    def destroy(self, request, *args, **kwargs):
+        """Delete a specific department by ID"""
+        try:
+            instance = self.get_object()
+            instance.delete()
+            return Response({"message": "Department deleted successfully"}, status=204)
+        except Department.DoesNotExist:
+            return Response({"error": "Department not found"}, status=404)
+        except Exception as e:
+            return Response({"error": str(e)}, status=500)
 
 class ReleavedEmployeeViewSet(viewsets.ModelViewSet):
     """
@@ -1922,6 +2060,46 @@ def update_project(request, pk):
         project = Project.objects.get(id=pk)
     except Project.DoesNotExist:
         return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
+
+    # Parse request data
+    data = request.data
+    
+    # Update fields if provided
+    project.name = data.get('name', project.name)
+    project.description = data.get('description', project.description)
+    project.status = data.get('status', project.status)
+    
+    if 'start_date' in data:
+        project.start_date = data['start_date']
+    if 'end_date' in data:
+        project.end_date = data['end_date']
+    
+    # Handle owner email
+    if 'email' in data:
+        try:
+            owner_user = User.objects.get(email=data['email'])
+            project.email = owner_user
+        except User.DoesNotExist:
+            return Response({"error": "User with given owner email not found."}, status=status.HTTP_400_BAD_REQUEST)
+    
+    # Handle members list
+    if 'members' in data:
+        member_emails = data['members']
+        members = User.objects.filter(email__in=member_emails)
+        # Check for missing emails
+        missing_emails = set(member_emails) - set(members.values_list('email', flat=True))
+        if missing_emails:
+            return Response({
+                "error": "Some member emails not found.",
+                "missing_emails": list(missing_emails)
+            }, status=status.HTTP_400_BAD_REQUEST)
+        # Assign members to project many-to-many field
+        project.members.set(list(members.values_list('pk', flat=True)))
+    
+    project.save()
+    
+    serializer = ProjectSerializer(project)
+    return Response(serializer.data, status=status.HTTP_200_OK)
 
 
 

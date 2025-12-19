@@ -209,7 +209,7 @@ class TicketSerializer(serializers.ModelSerializer):
 class HolidaySerializer(serializers.ModelSerializer):
     class Meta:  # type: ignore
         model = Holiday
-        fields = ['year', 'month', 'country', 'date', 'name', 'type', 'weekday']
+        fields = ['id', 'year', 'month', 'country', 'date', 'name', 'type', 'weekday']
 
 
 class AbsentEmployeeDetailsSerializer(serializers.ModelSerializer):

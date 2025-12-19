@@ -26,9 +26,9 @@ from accounts.views import (
 
 urlpatterns = [
     path('signup/', SignupView.as_view(), name='user-signup'),
-    path('login/', LoginView.as_view(), name='login'),
     path('approve/', approve_user),
     path('reject/', reject_user),
+    path('login/', LoginView.as_view(), name='login'),
     path('contact/', contact_view, name='contact'),
     path('geocoding/', geocoding_view, name='geocoding'),
 
