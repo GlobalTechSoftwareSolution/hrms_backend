@@ -210,6 +210,7 @@ class Award(models.Model):
 class Attendance(models.Model):
     LOCATION_TYPE_CHOICES = [
         ('office', 'Office'),
+        ('work', 'Work From Home'),
     ]
 
     id = models.AutoField(primary_key=True)
@@ -232,6 +233,26 @@ class Attendance(models.Model):
         indexes = [
             models.Index(fields=['email', 'date'])
         ]
+
+    def save(self, *args, **kwargs):
+        if self.email:
+            # Try to get from Employee first
+            try:
+                employee = Employee.objects.get(email=self.email)
+                self.fullname = employee.fullname
+                self.department = employee.department
+            except Employee.DoesNotExist:
+                # Try other models
+                for model in [HR, CEO, Manager, Admin]:
+                    try:
+                        instance = model.objects.get(email=self.email)
+                        self.fullname = instance.fullname
+                        if hasattr(instance, 'department'):
+                            self.department = instance.department
+                        break
+                    except model.DoesNotExist:
+                        continue
+        super().save(*args, **kwargs)
 
 
 # ------------------- OVERTIME -------------------
