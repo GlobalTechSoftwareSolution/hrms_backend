@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee, PettyCash, Shift
 from typing import Any, Dict, Optional, TYPE_CHECKING
@@ -161,29 +163,39 @@ class ProjectSerializer(serializers.ModelSerializer):
         if not any(c.isalpha() for c in value):
             raise serializers.ValidationError("Project title must contain at least some alphabetic characters.")
         
-        # Check for repetitive characters or random text
-        if len(set(value.lower())) < 3 and len(value) > 3:
-            raise serializers.ValidationError("Project title appears to be repetitive or random. Please provide a meaningful title.")
+        # Check for common random patterns (keyboard walks)
+        random_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm', 'qwerty', 'asdfgh', 'qwertyuiop']
+        value_lower = value.lower()
+        for pattern in random_patterns:
+            if pattern in value_lower:
+                raise serializers.ValidationError("Project title contains keyboard pattern. Please provide meaningful words.")
         
-        # Check if title contains meaningful words (not just random letters)
-        import re
-        # Remove common non-meaningful patterns
-        cleaned_value = re.sub(r'[^a-zA-Z\s]', '', value.lower())
-        words = cleaned_value.split()
-        
-        # Check if words are too short or appear random
-        meaningful_words = []
+        # Simple but effective randomness check
+        words = value.lower().split()
         for word in words:
-            if len(word) >= 3:  # Only consider words with 3+ characters
-                meaningful_words.append(word)
-        
-        if not meaningful_words:
-            raise serializers.ValidationError("Project title must contain meaningful words (at least 3 characters long).")
-        
-        # Check for vowel presence (indicates real words)
-        has_vowels = any(word.count(vowel) > 0 for word in meaningful_words for vowel in 'aeiou')
-        if not has_vowels and len(meaningful_words) > 0:
-            raise serializers.ValidationError("Project title appears to contain random characters. Please use real words.")
+            if len(word) >= 4:
+                # Count vowels vs consonants
+                vowels = sum(1 for char in word if char in 'aeiou')
+                consonants = len([c for c in word if c.isalpha() and c not in 'aeiou'])
+                
+                # If a word has 5+ characters and 0 or 1 vowel, it's likely random
+                if len(word) >= 5 and vowels <= 1:
+                    raise serializers.ValidationError("Project title contains random character sequences. Please use real words.")
+                
+                # Check for too many consecutive consonants (common in random typing)
+                consecutive_consonants = 0
+                max_consecutive = 0
+                for char in word:
+                    if char.isalpha() and char not in 'aeiou':
+                        consecutive_consonants += 1
+                    else:
+                        max_consecutive = max(max_consecutive, consecutive_consonants)
+                        consecutive_consonants = 0
+                
+                max_consecutive = max(max_consecutive, consecutive_consonants)
+                # Only flag as random if 5+ consecutive consonants OR 4+ in a long word
+                if max_consecutive >= 5 or (max_consecutive >= 4 and len(word) >= 6):
+                    raise serializers.ValidationError("Project title contains random character sequences. Please use real words.")
         
         return value.strip()
     
