@@ -2004,15 +2004,28 @@ def create_project(request):
         end_date = data.get("end_date")
         description = data.get("description")
 
-        # Create project instance (without members for now)
-        project = Project.objects.create(
-            name=name,
-            description=description,
-            status=project_status,
-            email=owner_user,
-            start_date=start_date,
-            end_date=end_date,
-        )
+        # Validate and create project using serializer with validation
+        from .serializers import ProjectSerializer
+        
+        project_data = {
+            'name': name,
+            'description': description,
+            'status': project_status,
+            'email': owner_email,
+            'start_date': start_date,
+            'end_date': end_date,
+        }
+        
+        serializer = ProjectSerializer(data=project_data)
+        if serializer.is_valid():
+            project = serializer.save()
+            project.email = owner_user
+            project.save()
+        else:
+            return JsonResponse({
+                "error": "Validation failed",
+                "details": serializer.errors
+            }, status=400)
 
         # Handle members list
         member_emails = data.get("members", [])
@@ -2850,7 +2863,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
 
 IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
-CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
+CHECK_IN_DEADLINE = time(12, 0)   # 12:00 PM
 LOCATION_RADIUS_METERS = 1000  # 100 meters
 
 def get_all_users_with_photos():

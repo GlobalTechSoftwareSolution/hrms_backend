@@ -47,7 +47,7 @@ def mark_absent_employees():
             logger.info("="*60)
             return
         
-        # Check if current time is past 10:45 AM (CHECK_IN_DEADLINE)
+        # Check if current time is past 12:00 PM (CHECK_IN_DEADLINE)
         if now_ist.time() < CHECK_IN_DEADLINE:
             logger.warning(f"Too early ({now_ist.time()}). Skipping absent marking.")
             logger.warning(f"Too early ({current_time}). Skipping absent marking.")

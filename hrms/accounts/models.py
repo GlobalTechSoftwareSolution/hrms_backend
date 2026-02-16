@@ -226,7 +226,7 @@ class Attendance(models.Model):
     check_in_photo = models.URLField(max_length=500, null=True, blank=True, help_text="Photo taken during check-in")
     check_out_photo = models.URLField(max_length=500, null=True, blank=True, help_text="Photo taken during check-out")
 
-    CHECK_IN_DEADLINE = time(10, 45)  # 10:45 AM
+    CHECK_IN_DEADLINE = time(12, 0)   # 12:00 PM
 
     class Meta:
         unique_together = ('email', 'date')

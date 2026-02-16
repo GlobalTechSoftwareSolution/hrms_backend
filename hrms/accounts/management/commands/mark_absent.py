@@ -57,7 +57,7 @@ class Command(BaseCommand):
             return
         
         # Check if current time is past 10:45 AM (10:45)
-        deadline = time(10, 45)  # 10:45 AM
+        deadline = time(12, 0)   # 12:00 PM
         
         if current_time < deadline:
             self.stdout.write(

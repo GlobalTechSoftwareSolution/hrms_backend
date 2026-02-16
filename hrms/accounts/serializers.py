@@ -148,6 +148,61 @@ class ReportSerializer(serializers.ModelSerializer):
 
 
 class ProjectSerializer(serializers.ModelSerializer):
+    def validate_name(self, value):
+        """Validate project title to ensure it contains meaningful content"""
+        if not value or not value.strip():
+            raise serializers.ValidationError("Project title cannot be empty or just whitespace.")
+        
+        # Check for minimum length
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError("Project title must be at least 3 characters long.")
+        
+        # Check if title contains only special characters or numbers
+        if not any(c.isalpha() for c in value):
+            raise serializers.ValidationError("Project title must contain at least some alphabetic characters.")
+        
+        # Check for repetitive characters or random text
+        if len(set(value.lower())) < 3 and len(value) > 3:
+            raise serializers.ValidationError("Project title appears to be repetitive or random. Please provide a meaningful title.")
+        
+        # Check if title contains meaningful words (not just random letters)
+        import re
+        # Remove common non-meaningful patterns
+        cleaned_value = re.sub(r'[^a-zA-Z\s]', '', value.lower())
+        words = cleaned_value.split()
+        
+        # Check if words are too short or appear random
+        meaningful_words = []
+        for word in words:
+            if len(word) >= 3:  # Only consider words with 3+ characters
+                meaningful_words.append(word)
+        
+        if not meaningful_words:
+            raise serializers.ValidationError("Project title must contain meaningful words (at least 3 characters long).")
+        
+        # Check for vowel presence (indicates real words)
+        has_vowels = any(word.count(vowel) > 0 for word in meaningful_words for vowel in 'aeiou')
+        if not has_vowels and len(meaningful_words) > 0:
+            raise serializers.ValidationError("Project title appears to contain random characters. Please use real words.")
+        
+        return value.strip()
+    
+    def validate_description(self, value):
+        """Validate project description to ensure it contains meaningful content"""
+        if value and not value.strip():
+            raise serializers.ValidationError("Project description cannot be just whitespace if provided.")
+        
+        if value:
+            # Check for minimum length if description is provided
+            if len(value.strip()) < 10:
+                raise serializers.ValidationError("Project description must be at least 10 characters long if provided.")
+            
+            # Check if description contains only special characters or numbers
+            if not any(c.isalpha() for c in value):
+                raise serializers.ValidationError("Project description must contain alphabetic characters.")
+        
+        return value.strip() if value else value
+    
     class Meta:  # type: ignore
         model = Project
         fields = '__all__'
