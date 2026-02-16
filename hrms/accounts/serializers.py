@@ -1,4 +1,5 @@
 import re
+from collections import Counter
 
 from rest_framework import serializers
 from .models import User, CEO, HR, Manager, Employee, Admin, Leave, Attendance, Report, Project, Notice, Document, Award, Department, Ticket, EmployeeDetails, Holiday, AbsentEmployeeDetails, AppliedJobs, JobPosting, ReleavedEmployee, PettyCash, Shift
@@ -163,41 +164,48 @@ class ProjectSerializer(serializers.ModelSerializer):
         if not any(c.isalpha() for c in value):
             raise serializers.ValidationError("Project title must contain at least some alphabetic characters.")
         
-        # Check for common random patterns (keyboard walks)
-        random_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm', 'qwerty', 'asdfgh', 'qwertyuiop']
+        # Only block obvious keyboard patterns
+        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm', 'qwertyuiop']
         value_lower = value.lower()
-        for pattern in random_patterns:
+        for pattern in keyboard_patterns:
             if pattern in value_lower:
                 raise serializers.ValidationError("Project title contains keyboard pattern. Please provide meaningful words.")
         
-        # Simple but effective randomness check
-        words = value.lower().split()
-        for word in words:
-            if len(word) >= 4:
-                # Count vowels vs consonants
-                vowels = sum(1 for char in word if char in 'aeiou')
-                consonants = len([c for c in word if c.isalpha() and c not in 'aeiou'])
-                
-                # If a word has 5+ characters and 0 or 1 vowel, it's likely random
-                if len(word) >= 5 and vowels <= 1:
-                    raise serializers.ValidationError("Project title contains random character sequences. Please use real words.")
-                
-                # Check for too many consecutive consonants (common in random typing)
-                consecutive_consonants = 0
-                max_consecutive = 0
-                for char in word:
-                    if char.isalpha() and char not in 'aeiou':
-                        consecutive_consonants += 1
-                    else:
-                        max_consecutive = max(max_consecutive, consecutive_consonants)
-                        consecutive_consonants = 0
-                
-                max_consecutive = max(max_consecutive, consecutive_consonants)
-                # Only flag as random if 5+ consecutive consonants OR 4+ in a long word
-                if max_consecutive >= 5 or (max_consecutive >= 4 and len(word) >= 6):
-                    raise serializers.ValidationError("Project title contains random character sequences. Please use real words.")
+        # Check for repetitive characters (e.g., 'aaaaaa', 'bbbbbb')
+        cleaned_value = value.strip()
+        if len(cleaned_value) > 4:
+            # Check for 4+ consecutive same characters
+            for i in range(len(cleaned_value) - 3):
+                if cleaned_value[i] == cleaned_value[i+1] == cleaned_value[i+2] == cleaned_value[i+3]:
+                    raise serializers.ValidationError("Project title contains excessive repeating characters. Please use real words.")
+            
+            # Check for very high frequency of one character
+            char_counts = Counter(cleaned_value.lower())
+            for char, count in char_counts.items():
+                if count > len(cleaned_value) * 0.5:  # If one character is 50%+ of string
+                    raise serializers.ValidationError("Project title has too many repeated characters. Please use real words.")
+            
+            # Check if project name contains at least two meaningful words
+            words = re.findall(r'[a-zA-Z]+', cleaned_value)
+            if len(words) < 2:
+                raise serializers.ValidationError("Project title should contain at least two meaningful words.")
+            
+            # Check if words are too short or look random
+            meaningful_word_count = 0
+            for word in words:
+                if len(word) >= 3:
+                    # Simple check: word should have vowels and reasonable character distribution
+                    if any(char in 'aeiou' for char in word):
+                        meaningful_word_count += 1
+            
+            if meaningful_word_count < 1:
+                raise serializers.ValidationError("Project title appears to contain random characters. Please use real words.")
         
-        return value.strip()
+        # Check for uniqueness of project name
+        if Project.objects.filter(name=cleaned_value).exists():
+            raise serializers.ValidationError("A project with this name already exists.")
+        
+        return cleaned_value
     
     def validate_description(self, value):
         """Validate project description to ensure it contains meaningful content"""
