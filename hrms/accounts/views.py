@@ -4296,13 +4296,18 @@ class AppliedJobViewSet(viewsets.ModelViewSet):
         resume_file = request.FILES.get('resume')
 
         serializer = self.get_serializer(data=data)
-        serializer.is_valid(raise_exception=True)
-        instance = serializer.save()
-
-        if resume_file:
-            upload_resume(instance, resume_file)
-
-        return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
+        if serializer.is_valid():
+            instance = serializer.save()
+            
+            if resume_file:
+                upload_resume(instance, resume_file)
+                
+            return Response(self.get_serializer(instance).data, status=status.HTTP_201_CREATED)
+        else:
+            return Response({
+                "error": "Validation failed",
+                "details": serializer.errors
+            }, status=status.HTTP_400_BAD_REQUEST)
 
     def partial_update(self, request, *args, **kwargs):
         """Update any field (like hired status, specialization, etc.)"""
