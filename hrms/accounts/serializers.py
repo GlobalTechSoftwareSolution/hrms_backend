@@ -223,7 +223,7 @@ class ProjectSerializer(serializers.ModelSerializer):
         if Project.objects.filter(name=cleaned_value).exists():
             raise serializers.ValidationError("A project with this name already exists.")
         
-        return cleaned_value
+        return value.strip()
     
     def validate_description(self, value):
         """Validate project description to ensure it contains meaningful content"""
@@ -430,7 +430,7 @@ class CareerSerializer(serializers.ModelSerializer):
                     if count > len(word) * 0.6:  # If one character is 60%+ of word
                         raise serializers.ValidationError("Skills contain random character patterns. Please use real skills.")
         
-        return cleaned_value
+        return value.strip()
     
     def validate_education(self, value):
         """Validate education requirements to ensure they contain meaningful content"""
@@ -515,7 +515,7 @@ class CareerSerializer(serializers.ModelSerializer):
                 if len(word) >= 10 and unique_chars >= len(word) - 1:
                     raise serializers.ValidationError("Job requirements appear to be randomly typed. Please use meaningful requirements.")
         
-        return cleaned_value
+        return value.strip()
     
     def validate_salary(self, value):
         """Validate salary range to ensure it's in proper format"""
@@ -563,7 +563,7 @@ class CareerSerializer(serializers.ModelSerializer):
                     if count > len(word) * 0.6:  # If one character is 60%+ of word
                         raise serializers.ValidationError("Job requirements contain random character patterns. Please use meaningful requirements.")
         
-        return cleaned_value
+        return value.strip()
     
     class Meta:  # type: ignore
         model = JobPosting
