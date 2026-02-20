@@ -365,30 +365,30 @@ class CareerSerializer(serializers.ModelSerializer):
                 raise serializers.ValidationError("Job title contains keyboard pattern. Please provide meaningful words.")
         
         # Check for repetitive characters (e.g., 'aaaaaa', 'bbbbbb')
-        for i in range(len(cleaned_value) - 3):
-            if cleaned_value[i] == cleaned_value[i+1] == cleaned_value[i+2] == cleaned_value[i+3]:
+        for i in range(len(value.strip()) - 3):
+            if value.strip()[i] == value.strip()[i+1] == value.strip()[i+2] == value.strip()[i+3]:
                 raise serializers.ValidationError("Job title contains excessive repeating characters. Please use real words.")
         
         # Check for very high frequency of one character
-        char_counts = Counter(cleaned_value.lower())
+        char_counts = Counter(value.strip().lower())
         for char, count in char_counts.items():
-            if count > len(cleaned_value) * 0.5:  # If one character is 50%+ of string
+            if count > len(value.strip()) * 0.5:  # If one character is 50%+ of string
                 raise serializers.ValidationError("Job title has too many repeated characters. Please use real words.")
         
         # Check if job title contains at least two meaningful words
-        words = re.findall(r'[a-zA-Z]+', cleaned_value)
+        words = re.findall(r'[a-zA-Z]+', value.strip())
         if len(words) < 2:
             raise serializers.ValidationError("Job title should contain at least two meaningful words.")
         
         # Advanced validation using textstat library
         try:
             # Check readability score - random text usually has very low scores
-            readability_score = textstat.flesch_reading_ease(cleaned_value)
+            readability_score = textstat.flesch_reading_ease(value.strip())
             if readability_score < -20:  # Very low readability indicates random text
                 raise serializers.ValidationError("Job title appears to be random characters. Please use meaningful words.")
             
             # Check syllable count - random text often has unrealistic syllable patterns
-            syllable_count = textstat.syllable_count(cleaned_value)
+            syllable_count = textstat.syllable_count(value.strip())
             word_count = len(words)
             if word_count > 0 and syllable_count / word_count > 10:  # Too many syllables per word
                 raise serializers.ValidationError("Job title contains unrealistic word patterns. Please use real words.")
