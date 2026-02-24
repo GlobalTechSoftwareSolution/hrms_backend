@@ -2863,7 +2863,7 @@ class TicketViewSet(viewsets.ModelViewSet):
 
 
 IST = timezone.get_fixed_timezone(330)  # IST is UTC+5:30
-CHECK_IN_DEADLINE = time(12, 0)   # 12:00 PM
+CHECK_IN_DEADLINE = time(11, 0)   # 11:00 AM
 LOCATION_RADIUS_METERS = 1000  # 100 meters
 
 def get_all_users_with_photos():
@@ -2882,7 +2882,7 @@ def get_all_users_with_photos():
 @api_view(['POST'])
 @permission_classes([AllowAny])
 def mark_office_attendance_view(request):
-    """Mark attendance from office location (within 1000m radius)"""
+    """Mark attendance from office location within 1000m radius"""
     try:
         latitude = request.POST.get("latitude")
         longitude = request.POST.get("longitude")

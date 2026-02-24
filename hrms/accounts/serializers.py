@@ -412,25 +412,22 @@ class CareerSerializer(serializers.ModelSerializer):
         if not any(c.isalpha() for c in value):
             raise serializers.ValidationError("Skills must contain alphabetic characters.")
         
-        # Check for random character patterns
+        # Check for random character patterns (simplified)
         cleaned_value = value.strip()
-        words = cleaned_value.split()
         
-        # Check for obvious random patterns
-        for word in words:
-            if len(word) >= 4:
-                # Check for 4+ consecutive same characters
-                for i in range(len(word) - 3):
-                    if word[i] == word[i+1] == word[i+2] == word[i+3]:
-                        raise serializers.ValidationError("Skills contain excessive repeating characters. Please use real skills.")
-                
-                # Check for very high frequency of one character
-                char_counts = Counter(word.lower())
-                for char, count in char_counts.items():
-                    if count > len(word) * 0.6:  # If one character is 60%+ of word
-                        raise serializers.ValidationError("Skills contain random character patterns. Please use real skills.")
+        # Only check for obvious keyboard patterns
+        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
+        value_lower = cleaned_value.lower()
+        for pattern in keyboard_patterns:
+            if pattern in value_lower:
+                raise serializers.ValidationError("Skills contain keyboard patterns. Please use real skills.")
         
-        return value.strip()
+        # Check for excessive repeating characters
+        for i in range(len(cleaned_value) - 3):
+            if cleaned_value[i] == cleaned_value[i+1] == cleaned_value[i+2] == cleaned_value[i+3]:
+                raise serializers.ValidationError("Skills contain excessive repeating characters. Please use real skills.")
+        
+        return cleaned_value
     
     def validate_education(self, value):
         """Validate education requirements to ensure they contain meaningful content"""
@@ -492,17 +489,22 @@ class CareerSerializer(serializers.ModelSerializer):
         
         # Check for random character patterns (more lenient)
         cleaned_value = value.strip()
+        
+        # Only validate if value is complete (not during typing)
+        if len(cleaned_value) < 10:
+            return cleaned_value
+            
         words = cleaned_value.split()
         
         # Check each word for randomness (only for very long words)
         for word in words:
-            if len(word) >= 8:  # Only check long words for randomness
+            if len(word) >= 10:  # Only check very long words for randomness
                 # Count vowels vs consonants
                 vowels = sum(1 for char in word if char in 'aeiou')
                 consonants = len([c for c in word if c.isalpha() and c not in 'aeiou'])
                 
                 # Only flag as random if very few vowels AND word is very long
-                if len(word) >= 8 and vowels <= 1:
+                if len(word) >= 10 and vowels <= 1:
                     raise serializers.ValidationError("Job requirements contain random character sequences. Please use real requirements.")
                 
                 # Check for character frequency - random typing often has evenly distributed characters
@@ -537,31 +539,6 @@ class CareerSerializer(serializers.ModelSerializer):
             # Check if it's just random characters
             if not any(c.isdigit() for c in value):
                 raise serializers.ValidationError("Salary range must contain numbers or be in proper format (e.g., $50,000 - $70,000).")
-        
-        return value.strip()
-    
-        
-        # Check if requirements contain only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Job requirements must contain alphabetic characters.")
-        
-        # Check for random character patterns
-        cleaned_value = value.strip()
-        words = cleaned_value.split()
-        
-        # Check for obvious random patterns
-        for word in words:
-            if len(word) >= 4:
-                # Check for 4+ consecutive same characters
-                for i in range(len(word) - 3):
-                    if word[i] == word[i+1] == word[i+2] == word[i+3]:
-                        raise serializers.ValidationError("Job requirements contain excessive repeating characters. Please use meaningful requirements.")
-                
-                # Check for very high frequency of one character
-                char_counts = Counter(word.lower())
-                for char, count in char_counts.items():
-                    if count > len(word) * 0.6:  # If one character is 60%+ of word
-                        raise serializers.ValidationError("Job requirements contain random character patterns. Please use meaningful requirements.")
         
         return value.strip()
     
