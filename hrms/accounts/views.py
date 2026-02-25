@@ -1,4 +1,4 @@
-import os, json, pytz, face_recognition, tempfile, requests, boto3
+import os, json, pytz, face_recognition, tempfile, requests, boto3, logging
 
 from io import BytesIO
 from pathlib import Path
@@ -94,7 +94,6 @@ def upload_attendance_photo(file_path_or_obj, email, date, content_type=None):
         # store under attendance/<date>/<email>/ to make per-day browsing easier
         key = f"attendance/{date.isoformat()}/{email}/{filename}"
         print(f"Generated key: {key}")
-
         # If given a path, use upload_file which reads from disk reliably
         if isinstance(file_path_or_obj, str) and os.path.exists(file_path_or_obj):
             print(f"Uploading from file path: {file_path_or_obj}")
@@ -535,6 +534,7 @@ BUCKET_NAME = settings.MINIO_STORAGE["BUCKET_NAME"]
 # ------------------- Base ViewSet -------------------
 class BaseUserViewSet(viewsets.ModelViewSet):
     lookup_field = "email"
+    logger = logging.getLogger(__name__)
 
     def _upload_profile_picture(self, instance, file_obj):
         client = get_s3_client()
@@ -596,53 +596,70 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 
     # ---------- PARTIAL UPDATE ----------
     def partial_update(self, request, *args, **kwargs):
-        instance = self.get_object()
-        updated = False
-
-        # Profile picture
-        if 'profile_picture' in request.FILES:
-            self._upload_profile_picture(instance, request.FILES['profile_picture'])
-            updated = True
-
-        # Update main model fields
-        for field, value in request.data.items():
-            if hasattr(instance, field) and field != 'profile_picture':
-                field_obj = instance._meta.get_field(field)
-                
-                # Handle ForeignKey fields
-                if field_obj.is_relation and isinstance(field_obj, models.ForeignKey):
-                    related_model = field_obj.remote_field.model
-
+        try:
+            instance = self.get_object()
+            updated = False
+            
+            # Profile picture
+            if 'profile_picture' in request.FILES:
+                self._upload_profile_picture(instance, request.FILES['profile_picture'])
+                updated = True
+            
+            # Update main model fields
+            for field, value in request.data.items():
+                if hasattr(instance, field) and field != 'profile_picture':
                     try:
-                        # Assume value is an email or PK
-                        if hasattr(related_model, 'email'):  # Check if related model has email field
-                            related_instance = related_model.objects.get(email=value)
+                        field_obj = instance._meta.get_field(field)
+                        
+                        # Handle ForeignKey fields
+                        if field_obj.is_relation and isinstance(field_obj, models.ForeignKey):
+                            related_model = field_obj.remote_field.model
+
+                            try:
+                                # Assume value is an email or PK
+                                if hasattr(related_model, 'email'):  # Check if related model has email field
+                                    related_instance = related_model.objects.get(email=value)
+                                else:
+                                    related_instance = related_model.objects.get(pk=value)
+                                setattr(instance, field, related_instance)
+                                updated = True
+                            except related_model.DoesNotExist:
+                                return Response(
+                                    {"error": f"{related_model.__name__} with email '{value}' does not exist"},
+                                    status=400
+                                )
                         else:
-                            related_instance = related_model.objects.get(pk=value)
-                        setattr(instance, field, related_instance)
-                        updated = True
-                    except related_model.DoesNotExist:
-                        return Response(
-                            {"error": f"{related_model.__name__} with email '{value}' does not exist"},
-                            status=400
-                        )
-                else:
-                    setattr(instance, field, value)
-                    updated = True
-
-        if updated:
-            instance.save()
-
-        # Update related EmployeeDetails if applicable
-        if hasattr(instance, "email"):
-            self._update_employee_details(instance, request.data)
-
-        return Response(self.get_serializer(instance).data, status=200)
+                            setattr(instance, field, value)
+                            updated = True
+                    except Exception as e:
+                        return Response({
+                            "error": f"Field '{field}' update failed: {str(e)}"
+                        }, status=400)
+            
+            # Save instance if updated
+            if updated:
+                try:
+                    instance.save()
+                    self.logger.info(f"Profile updated successfully: {instance.email}")
+                except Exception as e:
+                    return Response({
+                        "error": f"Failed to save profile: {str(e)}"
+                    }, status=400)
+                
+            response_data = self.get_serializer(instance).data
+            return Response(response_data, status=200, content_type='application/json')
+            
+        except Exception as e:
+            self.logger.error(f"Profile update failed: {str(e)}", exc_info=True)
+            return Response({
+                "error": f"Profile update failed: {str(e)}"
+            }, status=500)
 
 
     def update(self, request, *args, **kwargs):
         return self.partial_update(request, *args, **kwargs)
 
+# ... (rest of the code remains the same)
     # ---------- DESTROY ----------
     def destroy(self, request, email=None):
         try:
@@ -817,6 +834,9 @@ class BaseUserViewSet(viewsets.ModelViewSet):
 class EmployeeViewSet(BaseUserViewSet):
     queryset = Employee.objects.all()
     serializer_class = EmployeeSerializer
+    lookup_field = "email"
+    lookup_url_kwarg = "email"
+    permission_classes = [AllowAny]
 
 
 class HRViewSet(BaseUserViewSet):
