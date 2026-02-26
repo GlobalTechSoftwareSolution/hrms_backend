@@ -311,181 +311,80 @@ class AbsentEmployeeDetailsSerializer(serializers.ModelSerializer):
         fields = ['email', 'fullname', 'department', 'date']
 
 
+class FlexibleCharField(serializers.CharField):
+    """Custom CharField that handles arrays and strings"""
+    def to_internal_value(self, data):
+        if isinstance(data, list):
+            # Convert array to string
+            if not data:
+                raise serializers.ValidationError("This field cannot be empty.")
+            return '\n'.join(str(item) for item in data if item)
+        return super().to_internal_value(data)
+
+
 class CareerSerializer(serializers.ModelSerializer):
+    title = serializers.CharField(max_length=255, required=True)
+    department = serializers.CharField(max_length=255, required=True)
+    description = serializers.CharField(required=False, allow_blank=True)
+    responsibilities = FlexibleCharField(required=False, allow_blank=True)
+    requirements = FlexibleCharField(required=False, allow_blank=True)
+    benefits = FlexibleCharField(required=False, allow_blank=True)
+    skills = FlexibleCharField(required=False, allow_blank=True)
+    location = serializers.CharField(max_length=255, required=True)
+    type = serializers.ChoiceField(choices=JobPosting.JOB_TYPE_CHOICES, default='Full-time')
+    experience = serializers.CharField(max_length=50, required=True)
+    salary = serializers.CharField(max_length=50, required=False, allow_blank=True)
+    apply_link = serializers.URLField(max_length=500, required=False, allow_blank=True)
+    posted_date = serializers.DateField(required=True)
+    category = serializers.CharField(max_length=255, required=True)
+    education = serializers.CharField(max_length=255, required=True)
+    created_at = serializers.DateTimeField(read_only=True)
+    updated_at = serializers.DateTimeField(read_only=True)
     def validate_title(self, value):
-        """Validate job title to ensure it contains meaningful content"""
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
-            raise serializers.ValidationError("Job title cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 3:
-            raise serializers.ValidationError("Job title must be at least 3 characters long.")
-        
-        # Check if title contains only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Job title must contain alphabetic characters.")
-        
-        # Only block obvious keyboard patterns
-        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
-        value_lower = value.lower()
-        for pattern in keyboard_patterns:
-            if pattern in value_lower:
-                raise serializers.ValidationError("Job title contains keyboard pattern. Please provide meaningful words.")
-        
-        # Check for excessive repeating characters (only very obvious cases)
-        for i in range(len(value.strip()) - 5):
-            if value.strip()[i] == value.strip()[i+1] == value.strip()[i+2] == value.strip()[i+3] == value.strip()[i+4] == value.strip()[i+5]:
-                raise serializers.ValidationError("Job title contains excessive repeating characters. Please use real words.")
-        
-        
+            raise serializers.ValidationError("Job title cannot be empty.")
         return value.strip()
     
     def validate_responsibilities(self, value):
-        """Handle array or string for responsibilities"""
-        if isinstance(value, list):
-            # Convert array to string
-            if not value:
-                raise serializers.ValidationError("Responsibilities cannot be empty.")
-            value = '\n'.join(str(item) for item in value if item)
-        
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
-            raise serializers.ValidationError("Responsibilities cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 10:
-            raise serializers.ValidationError("Responsibilities must be at least 10 characters long.")
-        
-        # Check if responsibilities contain only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Responsibilities must contain alphabetic characters.")
-        
+            raise serializers.ValidationError("Responsibilities cannot be empty.")
         return value.strip()
     
     def validate_requirements(self, value):
-        """Handle array or string for requirements"""
-        if isinstance(value, list):
-            # Convert array to string
-            if not value:
-                raise serializers.ValidationError("Requirements cannot be empty.")
-            value = '\n'.join(str(item) for item in value if item)
-        
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
-            raise serializers.ValidationError("Job requirements cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 10:
-            raise serializers.ValidationError("Job requirements must be at least 10 characters long.")
-        
-        # Check if requirements contain only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Job requirements must contain alphabetic characters.")
-        
-        # Only block obvious keyboard patterns
-        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
-        value_lower = value.lower()
-        for pattern in keyboard_patterns:
-            if pattern in value_lower:
-                raise serializers.ValidationError("Job requirements contain keyboard patterns. Please use real requirements.")
-        
+            raise serializers.ValidationError("Requirements cannot be empty.")
         return value.strip()
     
     def validate_benefits(self, value):
-        """Handle array or string for benefits"""
-        if isinstance(value, list):
-            # Convert array to string
-            if not value:
-                raise serializers.ValidationError("Benefits cannot be empty.")
-            value = '\n'.join(str(item) for item in value if item)
-        
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
-            raise serializers.ValidationError("Benefits cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 5:
-            raise serializers.ValidationError("Benefits must be at least 5 characters long.")
-        
-        # Check if benefits contain only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Benefits must contain alphabetic characters.")
-        
+            raise serializers.ValidationError("Benefits cannot be empty.")
         return value.strip()
     
     def validate_skills(self, value):
-        """Handle array or string for skills"""
-        if isinstance(value, list):
-            # Convert array to string
-            if not value:
-                raise serializers.ValidationError("Skills cannot be empty.")
-            value = ', '.join(str(item) for item in value if item)
-        
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
-            raise serializers.ValidationError("Skills cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 5:
-            raise serializers.ValidationError("Skills must be at least 5 characters long.")
-        
-        # Check if skills contain only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Skills must contain alphabetic characters.")
-        
-        # Only block obvious keyboard patterns
-        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
-        value_lower = value.lower()
-        for pattern in keyboard_patterns:
-            if pattern in value_lower:
-                raise serializers.ValidationError("Skills contain keyboard patterns. Please use real skills.")
-        
+            raise serializers.ValidationError("Skills cannot be empty.")
         return value.strip()
     
     def validate_education(self, value):
-        """Validate education requirements to ensure they contain meaningful content"""
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
-            raise serializers.ValidationError("Education requirements cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 3:
-            raise serializers.ValidationError("Education requirements must be at least 3 characters long.")
-        
-        # Check if education contains only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Education requirements must contain alphabetic characters.")
-        
-        # Only block obvious keyboard patterns
-        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
-        value_lower = value.lower()
-        for pattern in keyboard_patterns:
-            if pattern in value_lower:
-                raise serializers.ValidationError("Education requirements contain keyboard patterns. Please use real education requirements.")
-        
+            raise serializers.ValidationError("Education cannot be empty.")
         return value.strip()
     
     def validate_salary(self, value):
-        """Validate salary range to ensure it's in proper format"""
+        """Very basic validation - just check for empty"""
         if not value or not value.strip():
             return value  # Salary is optional
-        
-        # Check for common salary formats
-        salary_patterns = [
-            r'\$\d{1,3}(,\d{3})*\s*-\s*\$\d{1,3}(,\d{3})*',  # $50,000 - $70,000
-            r'\$\d{1,3}(,\d{3})*\s*to\s*\$\d{1,3}(,\d{3})*',   # $50,000 to $70,000
-            r'\d{1,3}(,\d{3})*\s*-\s*\d{1,3}(,\d{3})*',        # 50,000 - 70,000
-            r'\$\d{1,3}(,\d{3})*\s*per\s*(year|month|hour)',   # $50,000 per year
-        ]
-        
-        value_lower = value.lower()
-        has_valid_format = any(re.search(pattern, value_lower) for pattern in salary_patterns)
-        
-        if not has_valid_format:
-            # Check if it's just random characters
-            if not any(c.isdigit() for c in value):
-                raise serializers.ValidationError("Salary range must contain numbers or be in proper format (e.g., $50,000 - $70,000).")
-        
         return value.strip()
     
-    class Meta:  # type: ignore
+    class Meta:
         model = JobPosting
-        fields = '__all__'
+        fields = ['id', 'title', 'department', 'description', 'responsibilities', 'requirements', 'benefits', 'skills', 'location', 'type', 'experience', 'salary', 'apply_link', 'posted_date', 'category', 'education', 'created_at', 'updated_at']
 
 
 class AppliedJobSerializer(serializers.ModelSerializer):
