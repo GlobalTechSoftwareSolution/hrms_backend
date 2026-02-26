@@ -323,111 +323,120 @@ class CareerSerializer(serializers.ModelSerializer):
         
         # Check if title contains only special characters or numbers
         if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Job title must contain at least some alphabetic characters.")
-        
-        # Very aggressive check for completely random content
-        cleaned_value = value.strip().lower()
-        words = cleaned_value.split()
-        
-        # Check each word for randomness
-        for word in words:
-            if len(word) >= 3:
-                # Check if word is a common job title keyword (bypass validation)
-                job_title_keywords = ['manager', 'developer', 'engineer', 'analyst', 'designer', 'consultant', 'coordinator', 'specialist', 'supervisor', 'director', 'administrator', 'assistant', 'associate', 'lead', 'architect', 'technician', 'advisor', 'officer', 'executive', 'planner', 'researcher', 'trainer', 'representative', 'agent', 'broker', 'software', 'senior', 'junior', 'principal', 'head', 'chief', 'vp', 'vice', 'president', 'marketing', 'sales', 'finance', 'hr', 'human', 'resources', 'technical', 'product', 'project', 'data', 'science', 'quality', 'assurance', 'operations', 'logistics', 'procurement', 'legal', 'compliance', 'risk', 'audit', 'tax', 'accounting', 'financial', 'business', 'development', 'testing', 'support', 'maintenance', 'security', 'network', 'database', 'web', 'mobile', 'cloud', 'devops', 'agile', 'scrum', 'fullstack', 'frontend', 'backend']
-                
-                # If word is a common job title, allow it even with fewer vowels
-                if word.lower() in job_title_keywords:
-                    continue  # Skip validation for this word
-                
-                # Count vowels vs consonants
-                vowels = sum(1 for char in word if char in 'aeiou')
-                consonants = len([c for c in word if c.isalpha() and c not in 'aeiou'])
-                
-                # Only flag as random if very few vowels AND word is long
-                if len(word) >= 6 and vowels <= 1:
-                    raise serializers.ValidationError("Job title contains random character sequences. Please use real words.")
-                
-                # Check for character frequency - random typing often has evenly distributed characters
-                char_counts = {}
-                for char in word:
-                    char_counts[char] = char_counts.get(char, 0) + 1
-                
-                # Only flag as random if most characters appear only once AND word is very long
-                unique_chars = len(char_counts)
-                if len(word) >= 7 and unique_chars >= len(word) - 1:
-                    raise serializers.ValidationError("Job title appears to be randomly typed. Please use real words.")
+            raise serializers.ValidationError("Job title must contain alphabetic characters.")
         
         # Only block obvious keyboard patterns
-        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm', 'qwertyuiop']
+        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
         value_lower = value.lower()
         for pattern in keyboard_patterns:
             if pattern in value_lower:
                 raise serializers.ValidationError("Job title contains keyboard pattern. Please provide meaningful words.")
         
-        # Check for repetitive characters (e.g., 'aaaaaa', 'bbbbbb')
-        for i in range(len(value.strip()) - 3):
-            if value.strip()[i] == value.strip()[i+1] == value.strip()[i+2] == value.strip()[i+3]:
+        # Check for excessive repeating characters (only very obvious cases)
+        for i in range(len(value.strip()) - 5):
+            if value.strip()[i] == value.strip()[i+1] == value.strip()[i+2] == value.strip()[i+3] == value.strip()[i+4] == value.strip()[i+5]:
                 raise serializers.ValidationError("Job title contains excessive repeating characters. Please use real words.")
         
-        # Check for very high frequency of one character
-        char_counts = Counter(value.strip().lower())
-        for char, count in char_counts.items():
-            if count > len(value.strip()) * 0.5:  # If one character is 50%+ of string
-                raise serializers.ValidationError("Job title has too many repeated characters. Please use real words.")
         
-        # Check if job title contains at least two meaningful words
-        words = re.findall(r'[a-zA-Z]+', value.strip())
-        if len(words) < 2:
-            raise serializers.ValidationError("Job title should contain at least two meaningful words.")
+        return value.strip()
+    
+    def validate_responsibilities(self, value):
+        """Handle array or string for responsibilities"""
+        if isinstance(value, list):
+            # Convert array to string
+            if not value:
+                raise serializers.ValidationError("Responsibilities cannot be empty.")
+            value = '\n'.join(str(item) for item in value if item)
         
-        # Advanced validation using textstat library
-        try:
-            # Check readability score - random text usually has very low scores
-            readability_score = textstat.flesch_reading_ease(value.strip())
-            if readability_score < -20:  # Very low readability indicates random text
-                raise serializers.ValidationError("Job title appears to be random characters. Please use meaningful words.")
-            
-            # Check syllable count - random text often has unrealistic syllable patterns
-            syllable_count = textstat.syllable_count(value.strip())
-            word_count = len(words)
-            if word_count > 0 and syllable_count / word_count > 10:  # Too many syllables per word
-                raise serializers.ValidationError("Job title contains unrealistic word patterns. Please use real words.")
-                
-        except:
-            # If textstat fails, continue with basic validation
-            pass
+        if not value or not value.strip():
+            raise serializers.ValidationError("Responsibilities cannot be empty or just whitespace.")
+        
+        # Check for minimum length
+        if len(value.strip()) < 10:
+            raise serializers.ValidationError("Responsibilities must be at least 10 characters long.")
+        
+        # Check if responsibilities contain only special characters or numbers
+        if not any(c.isalpha() for c in value):
+            raise serializers.ValidationError("Responsibilities must contain alphabetic characters.")
+        
+        return value.strip()
+    
+    def validate_requirements(self, value):
+        """Handle array or string for requirements"""
+        if isinstance(value, list):
+            # Convert array to string
+            if not value:
+                raise serializers.ValidationError("Requirements cannot be empty.")
+            value = '\n'.join(str(item) for item in value if item)
+        
+        if not value or not value.strip():
+            raise serializers.ValidationError("Job requirements cannot be empty or just whitespace.")
+        
+        # Check for minimum length
+        if len(value.strip()) < 10:
+            raise serializers.ValidationError("Job requirements must be at least 10 characters long.")
+        
+        # Check if requirements contain only special characters or numbers
+        if not any(c.isalpha() for c in value):
+            raise serializers.ValidationError("Job requirements must contain alphabetic characters.")
+        
+        # Only block obvious keyboard patterns
+        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
+        value_lower = value.lower()
+        for pattern in keyboard_patterns:
+            if pattern in value_lower:
+                raise serializers.ValidationError("Job requirements contain keyboard patterns. Please use real requirements.")
+        
+        return value.strip()
+    
+    def validate_benefits(self, value):
+        """Handle array or string for benefits"""
+        if isinstance(value, list):
+            # Convert array to string
+            if not value:
+                raise serializers.ValidationError("Benefits cannot be empty.")
+            value = '\n'.join(str(item) for item in value if item)
+        
+        if not value or not value.strip():
+            raise serializers.ValidationError("Benefits cannot be empty or just whitespace.")
+        
+        # Check for minimum length
+        if len(value.strip()) < 5:
+            raise serializers.ValidationError("Benefits must be at least 5 characters long.")
+        
+        # Check if benefits contain only special characters or numbers
+        if not any(c.isalpha() for c in value):
+            raise serializers.ValidationError("Benefits must contain alphabetic characters.")
         
         return value.strip()
     
     def validate_skills(self, value):
-        """Validate skills to ensure they contain meaningful content"""
+        """Handle array or string for skills"""
+        if isinstance(value, list):
+            # Convert array to string
+            if not value:
+                raise serializers.ValidationError("Skills cannot be empty.")
+            value = ', '.join(str(item) for item in value if item)
+        
         if not value or not value.strip():
             raise serializers.ValidationError("Skills cannot be empty or just whitespace.")
         
         # Check for minimum length
-        if len(value.strip()) < 10:
-            raise serializers.ValidationError("Skills must be at least 10 characters long.")
+        if len(value.strip()) < 5:
+            raise serializers.ValidationError("Skills must be at least 5 characters long.")
         
         # Check if skills contain only special characters or numbers
         if not any(c.isalpha() for c in value):
             raise serializers.ValidationError("Skills must contain alphabetic characters.")
         
-        # Check for random character patterns (simplified)
-        cleaned_value = value.strip()
-        
-        # Only check for obvious keyboard patterns
+        # Only block obvious keyboard patterns
         keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
-        value_lower = cleaned_value.lower()
+        value_lower = value.lower()
         for pattern in keyboard_patterns:
             if pattern in value_lower:
                 raise serializers.ValidationError("Skills contain keyboard patterns. Please use real skills.")
         
-        # Check for excessive repeating characters
-        for i in range(len(cleaned_value) - 3):
-            if cleaned_value[i] == cleaned_value[i+1] == cleaned_value[i+2] == cleaned_value[i+3]:
-                raise serializers.ValidationError("Skills contain excessive repeating characters. Please use real skills.")
-        
-        return cleaned_value
+        return value.strip()
     
     def validate_education(self, value):
         """Validate education requirements to ensure they contain meaningful content"""
@@ -435,87 +444,19 @@ class CareerSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Education requirements cannot be empty or just whitespace.")
         
         # Check for minimum length
-        if len(value.strip()) < 5:
-            raise serializers.ValidationError("Education requirements must be at least 5 characters long.")
+        if len(value.strip()) < 3:
+            raise serializers.ValidationError("Education requirements must be at least 3 characters long.")
         
         # Check if education contains only special characters or numbers
         if not any(c.isalpha() for c in value):
             raise serializers.ValidationError("Education requirements must contain alphabetic characters.")
         
-        # Check for common education keywords
-        education_keywords = ['bachelor', 'master', 'phd', 'degree', 'diploma', 'certificate', 'high school', 'graduate', 'undergraduate', 'postgraduate', 'btech', 'b.tech', 'mtech', 'm.tech', 'be', 'b.e', 'me', 'm.e', 'bsc', 'b.sc', 'msc', 'm.sc', 'ba', 'ma', 'engineering', 'computer science', 'information technology', 'it', 'cs']
+        # Only block obvious keyboard patterns
+        keyboard_patterns = ['asdf', 'qwer', 'zxcv', 'ghjk', 'bnm']
         value_lower = value.lower()
-        
-        # If no common education keywords found, check for random patterns
-        has_education_keyword = any(keyword in value_lower for keyword in education_keywords)
-        
-        if not has_education_keyword:
-            # Check for random character patterns
-            words = value_lower.split()
-            for word in words:
-                if len(word) >= 4:
-                    # Count vowels vs consonants
-                    vowels = sum(1 for char in word if char in 'aeiou')
-                    consonants = len([c for c in word if c.isalpha() and c not in 'aeiou'])
-                    
-                    # If word has very few vowels compared to length, it's likely random
-                    if len(word) >= 4 and vowels <= 1:
-                        raise serializers.ValidationError("Education requirements appear to contain random characters. Please use meaningful education requirements.")
-                    
-                    # Check for character frequency - random typing often has evenly distributed characters
-                    char_counts = {}
-                    for char in word:
-                        char_counts[char] = char_counts.get(char, 0) + 1
-                    
-                    # If most characters appear only once, likely random typing
-                    unique_chars = len(char_counts)
-                    if len(word) >= 5 and unique_chars >= len(word) - 1:
-                        raise serializers.ValidationError("Education requirements contain random character patterns. Please use meaningful education requirements.")
-        
-        return value.strip()
-    
-    def validate_requirements(self, value):
-        """Validate job requirements to ensure they contain meaningful content"""
-        if not value or not value.strip():
-            raise serializers.ValidationError("Job requirements cannot be empty or just whitespace.")
-        
-        # Check for minimum length
-        if len(value.strip()) < 15:
-            raise serializers.ValidationError("Job requirements must be at least 15 characters long.")
-        
-        # Check if requirements contain only special characters or numbers
-        if not any(c.isalpha() for c in value):
-            raise serializers.ValidationError("Job requirements must contain alphabetic characters.")
-        
-        # Check for random character patterns (more lenient)
-        cleaned_value = value.strip()
-        
-        # Only validate if value is complete (not during typing)
-        if len(cleaned_value) < 10:
-            return cleaned_value
-            
-        words = cleaned_value.split()
-        
-        # Check each word for randomness (only for very long words)
-        for word in words:
-            if len(word) >= 10:  # Only check very long words for randomness
-                # Count vowels vs consonants
-                vowels = sum(1 for char in word if char in 'aeiou')
-                consonants = len([c for c in word if c.isalpha() and c not in 'aeiou'])
-                
-                # Only flag as random if very few vowels AND word is very long
-                if len(word) >= 10 and vowels <= 1:
-                    raise serializers.ValidationError("Job requirements contain random character sequences. Please use real requirements.")
-                
-                # Check for character frequency - random typing often has evenly distributed characters
-                char_counts = {}
-                for char in word:
-                    char_counts[char] = char_counts.get(char, 0) + 1
-                
-                # Only flag as random if most characters appear only once AND word is very long
-                unique_chars = len(char_counts)
-                if len(word) >= 10 and unique_chars >= len(word) - 1:
-                    raise serializers.ValidationError("Job requirements appear to be randomly typed. Please use meaningful requirements.")
+        for pattern in keyboard_patterns:
+            if pattern in value_lower:
+                raise serializers.ValidationError("Education requirements contain keyboard patterns. Please use real education requirements.")
         
         return value.strip()
     
