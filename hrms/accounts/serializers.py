@@ -313,13 +313,20 @@ class AbsentEmployeeDetailsSerializer(serializers.ModelSerializer):
 
 class FlexibleCharField(serializers.CharField):
     """Custom CharField that handles arrays and strings"""
+    def __init__(self, *args, **kwargs):
+        self.separator = kwargs.pop('separator', '\n')
+        super().__init__(*args, **kwargs)
+    
     def to_internal_value(self, data):
         if isinstance(data, list):
             # Convert array to string
             if not data:
                 raise serializers.ValidationError("This field cannot be empty.")
-            return '\n'.join(str(item) for item in data if item)
-        return super().to_internal_value(data)
+            return self.separator.join(str(item) for item in data if item)
+        elif isinstance(data, str):
+            return data
+        else:
+            return str(data)
 
 
 class CareerSerializer(serializers.ModelSerializer):
@@ -329,7 +336,7 @@ class CareerSerializer(serializers.ModelSerializer):
     responsibilities = FlexibleCharField(required=False, allow_blank=True)
     requirements = FlexibleCharField(required=False, allow_blank=True)
     benefits = FlexibleCharField(required=False, allow_blank=True)
-    skills = FlexibleCharField(required=False, allow_blank=True)
+    skills = FlexibleCharField(required=False, allow_blank=True, separator=', ')
     location = serializers.CharField(max_length=255, required=True)
     type = serializers.ChoiceField(choices=JobPosting.JOB_TYPE_CHOICES, default='Full-time')
     experience = serializers.CharField(max_length=50, required=True)
